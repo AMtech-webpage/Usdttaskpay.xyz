@@ -245,82 +245,70 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
           </div>
         </div>
 
-        {/* Triple Summary Cards */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3 mb-10">
+        {/* Triple Summary Cards (Bento style) */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-8">
           
-          {/* Main Balance Display Card */}
-          <div className="relative overflow-hidden rounded-2xl border border-glow bg-gradient-to-tr from-[#0F172A] via-[#111C44] to-[#1E1B4B] p-6 shadow-xl">
-            <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-cyan-500/10 blur-3xl" />
-            <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-electric-blue/10 blur-3xl" />
-
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold tracking-wider text-cyan-400 uppercase">
-                Available Wallet Balance
-              </span>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-950/40 border border-cyan-500/20">
-                <Coins className="h-5 w-5 text-cyan-400" />
+          {/* Main Balance Display Card (span 6) */}
+          <div className="md:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+            
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] text-cyan-400 font-mono font-bold uppercase tracking-widest">Available Wallet Balance</span>
+                <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded font-mono font-bold">80% User Yield</span>
               </div>
-            </div>
-
-            <div className="mt-4">
-              <span className="font-display text-3xl font-black text-white sm:text-4xl tracking-tight">
-                {currentProfile.balance.toFixed(4)}
-              </span>
-              <span className="ml-1.5 font-display text-sm font-bold text-cyan-400">USDT</span>
-            </div>
-
-            <p className="mt-3 text-xs text-slate-400">
-              Corresponds directly to your <span className="text-emerald-400 font-semibold">80% clean yield</span>. Minimum withdraw threshold is 2.0000 USDT.
-            </p>
-          </div>
-
-          {/* Cumulative Earned Card */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold tracking-wider text-slate-400 uppercase">
-                Total Earned (All-Time)
-              </span>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 border border-slate-800">
-                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              <div className="text-4xl font-mono font-black tracking-tighter text-white">
+                {currentProfile.balance.toFixed(4)} <span className="text-sm font-semibold text-cyan-400/80">USDT</span>
               </div>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                Min. threshold of <strong className="text-white">2.0000 USDT</strong> applies for secure off-chain blockchain routing.
+              </p>
             </div>
 
-            <div className="mt-4">
-              <span className="font-display text-3xl font-bold text-white sm:text-4xl tracking-tight">
-                {aggregateTotalEarned.toFixed(4)}
-              </span>
-              <span className="ml-1.5 font-display text-sm font-bold text-slate-500">USDT</span>
-            </div>
-
-            <div className="mt-3 flex items-center text-xs text-slate-500">
-              <CheckCircle className="mr-1 h-3.5 w-3.5 text-emerald-400" />
-              <span>Attention values fully converted</span>
+            <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/5 font-mono">
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Accumulated</p>
+                <p className="font-bold text-sm text-slate-200">{aggregateTotalEarned.toFixed(4)} USDT</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Attention share</p>
+                <p className="font-bold text-sm text-emerald-400">80/20 Contract</p>
+              </div>
             </div>
           </div>
 
-          {/* House Split Platform Fee card */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold tracking-wider text-slate-400 uppercase">
-                Platform Commission (20% House)
-              </span>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 border border-slate-800">
-                <Flame className="h-5 w-5 text-purple-400" />
+          {/* Cumulative Earned Card (span 3) */}
+          <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">All-Time Revenue</span>
               </div>
+              <p className="text-2xl font-mono font-bold text-white tracking-tight">{aggregateTotalEarned.toFixed(4)}</p>
+              <p className="text-[10px] text-slate-400 mt-1">Total revenue converted via verified video streams & tasks.</p>
             </div>
-
-            <div className="mt-4">
-              <span className="font-display text-3xl font-bold text-white sm:text-4xl tracking-tight">
-                {aggregateCommissionPaid.toFixed(4)}
-              </span>
-              <span className="ml-1.5 font-display text-sm font-bold text-slate-500">USDT</span>
-            </div>
-
-            <div className="mt-3 flex items-center text-xs text-slate-500">
-              <Info className="mr-1 h-3.5 w-3.5 text-slate-400" />
-              <span>Sustains network server infrastructure</span>
+            
+            <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+              <CheckCircle className="h-3 w-3 shrink-0" />
+              <span>Full Ledger Synced</span>
             </div>
           </div>
+
+          {/* House Platform Fee card (span 3) */}
+          <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Platform Commission</span>
+              </div>
+              <p className="text-2xl font-mono font-bold text-cyan-400 tracking-tight">{aggregateCommissionPaid.toFixed(4)} <span className="text-xs text-slate-400 font-sans">USDT</span></p>
+              <p className="text-[10px] text-slate-400 mt-1">20% fee reserved for routing protocols and cloud server databases.</p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+              <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
+              <span>20% Model Verified</span>
+            </div>
+          </div>
+
         </div>
 
         {/* Main Columns layout */}

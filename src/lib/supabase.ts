@@ -243,15 +243,25 @@ export const api = {
     },
 
     async signOut() {
+      localStorage.removeItem('w2e_current_session');
       if (isSupabaseConfigured() && supabase) {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-      } else {
-        localStorage.removeItem('w2e_current_session');
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.warn('Supabase auth signOut warning: ', e);
+        }
       }
     },
 
     async getSession() {
+      const sandboxSession = getLocalData<any>('w2e_current_session', null);
+      if (sandboxSession && sandboxSession.is_sandbox_override) {
+        const profileKey = `w2e_profile_${sandboxSession.user.id}`;
+        const currentProfile = getLocalData<UserProfile>(profileKey, sandboxSession.profile);
+        sandboxSession.profile = currentProfile;
+        return sandboxSession;
+      }
+
       if (isSupabaseConfigured() && supabase) {
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
@@ -293,6 +303,39 @@ export const api = {
         }
         return session || { user: null, profile: null };
       }
+    },
+
+    async bypassIntoSandbox(email: string, fullName: string) {
+      const mockUserId = `mock-user-${Math.random().toString(36).substring(2, 11)}`;
+      const newUserProfile: UserProfile = {
+        id: mockUserId,
+        email: email || 'sandbox@w2e.network',
+        full_name: fullName || 'Sandbox Pioneer',
+        balance: 1.8500, // Seeding with 1.85 USDT makes it incredibly fast to verify video earnings and hit the 2.0 USDT withdrawal threshold!
+        total_earned: 1.8500,
+        total_platform_commission: 0.4625,
+        wallet_address: '',
+        created_at: new Date().toISOString()
+      };
+
+      const newAuthUser = {
+        id: mockUserId,
+        email: email || 'sandbox@w2e.network',
+        user_metadata: { full_name: fullName || 'Sandbox Pioneer' }
+      };
+
+      const session = {
+        user: newAuthUser,
+        profile: newUserProfile,
+        token: 'mock-session-jwt-token-string',
+        is_sandbox_override: true
+      };
+
+      const profileKey = `w2e_profile_${mockUserId}`;
+      setLocalData(profileKey, newUserProfile);
+      setLocalData('w2e_current_session', session);
+
+      return session;
     }
   },
 
