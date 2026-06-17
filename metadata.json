@@ -1,0 +1,6 @@
+{
+  "name": "Watch-to-Earn USDT Platform",
+  "description": "Watch premium ads, complete small micro-tasks, and earn real USDT with instant blockchain withdrawals and a 20% house commission model.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
