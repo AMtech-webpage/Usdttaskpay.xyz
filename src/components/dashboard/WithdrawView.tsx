@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserProfile } from '../../lib/supabase';
-import { Wallet, Info, Loader2 } from 'lucide-react';
+import { Wallet, Info, Loader2, CheckCircle2, X } from 'lucide-react';
 
 interface WithdrawViewProps {
   currentProfile: UserProfile;
@@ -13,6 +13,7 @@ interface WithdrawViewProps {
   networkType: 'erc20' | 'bep20' | 'trc20';
   setNetworkType: (type: 'erc20' | 'bep20' | 'trc20') => void;
   onWithdrawSubmit: (e: React.FormEvent) => void;
+  onClearStatus?: () => void;
 }
 
 export const WithdrawView: React.FC<WithdrawViewProps> = ({
@@ -26,6 +27,7 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
   networkType,
   setNetworkType,
   onWithdrawSubmit,
+  onClearStatus,
 }) => {
   return (
     <div className="space-y-6 max-w-xl mx-auto">
@@ -46,13 +48,29 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
 
         {/* Status Notice */}
         {withdrawalStatus && (
-          <div className={`p-4 rounded-xl text-xs font-medium mb-5 leading-relaxed flex items-start space-x-2.5 ${
+          <div className={`p-4 rounded-xl text-xs font-medium mb-5 leading-relaxed flex items-start justify-between gap-3 ${
             withdrawalStatus.type === 'success' 
-              ? 'bg-emerald-950/20 border border-emerald-500/20 text-emerald-300' 
-              : 'bg-red-950/20 border border-red-500/20 text-red-300'
+              ? 'bg-emerald-950/25 border border-emerald-500/35 text-emerald-300 shadow-lg shadow-emerald-500/5' 
+              : 'bg-red-950/25 border border-red-500/35 text-red-300 shadow-lg shadow-red-500/5'
           }`}>
-            <Info className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{withdrawalStatus.text}</span>
+            <div className="flex items-start space-x-2.5">
+              {withdrawalStatus.type === 'success' ? (
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="h-4.5 w-4.5 text-red-400 shrink-0 mt-0.5" />
+              )}
+              <span>{withdrawalStatus.text}</span>
+            </div>
+            {onClearStatus && (
+              <button 
+                type="button" 
+                onClick={onClearStatus}
+                className="p-1 rounded hover:bg-slate-900/40 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Dismiss message"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
 
@@ -161,22 +179,36 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
           </div>
 
           {/* Button */}
-          <button
-            type="submit"
-            disabled={withdrawalLoading || currentProfile.balance < 2}
-            className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-500 py-3.5 text-xs font-bold text-white transition-all duration-300 hover:brightness-110 disabled:opacity-40"
-          >
-            {withdrawalLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Broadcasting Signature...</span>
-              </>
-            ) : currentProfile.balance < 2 ? (
-              <span>Requires min. 2.0000 USDT balance</span>
-            ) : (
-              <span>Execute Blockchain Withdrawal</span>
-            )}
-          </button>
+          {withdrawalStatus && withdrawalStatus.type === 'success' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setWithdrawAmount('');
+                if (onClearStatus) onClearStatus();
+              }}
+              className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-600 to-emerald-500 py-3.5 text-xs font-mono font-bold text-white transition-all duration-300 hover:brightness-110 shadow-lg shadow-emerald-500/10 active:scale-[0.98]"
+            >
+              <CheckCircle2 className="h-4 w-4 animate-bounce" />
+              <span>Close Receipt & Done</span>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={withdrawalLoading || currentProfile.balance < 2}
+              className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-500 py-3.5 text-xs font-bold text-white transition-all duration-300 hover:brightness-110 disabled:opacity-40"
+            >
+              {withdrawalLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Broadcasting Signature...</span>
+                </>
+              ) : currentProfile.balance < 2 ? (
+                <span>Requires min. 2.0000 USDT balance</span>
+              ) : (
+                <span>Execute Blockchain Withdrawal</span>
+              )}
+            </button>
+          )}
         </form>
       </div>
     </div>

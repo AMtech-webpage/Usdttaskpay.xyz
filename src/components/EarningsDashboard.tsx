@@ -851,6 +851,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             networkType={networkType}
             setNetworkType={setNetworkType}
             onWithdrawSubmit={handleWithdraw}
+            onClearStatus={() => setWithdrawalStatus(null)}
           />
         )}
 
@@ -1068,32 +1069,48 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
               )}
 
               {/* Submit Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={withdrawalLoading}
-                  className="flex-1 cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:brightness-110 disabled:opacity-50 shadow-md shadow-emerald-500/15 py-3 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
-                >
-                  {withdrawalLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Broadcasting Ledger...</span>
-                    </>
-                  ) : (
-                    <span>Broadcast Payout</span>
-                  )}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setIsWithdrawModalOpen(false);
-                    setWithdrawalStatus(null);
-                  }}
-                  className="cursor-pointer py-3 px-5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-xs font-bold uppercase tracking-wider transition-all font-sans"
-                >
-                  Close
-                </button>
-              </div>
+              {withdrawalStatus && withdrawalStatus.type === 'success' ? (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsWithdrawModalOpen(false);
+                      setWithdrawalStatus(null);
+                      setWithdrawAmount('');
+                    }}
+                    className="w-full cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-500 hover:brightness-110 shadow-lg shadow-emerald-500/15 py-3.5 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
+                  >
+                    <span>Close Receipt & Done</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={withdrawalLoading}
+                    className="flex-1 cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:brightness-110 disabled:opacity-50 shadow-md shadow-emerald-500/15 py-3 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
+                  >
+                    {withdrawalLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Broadcasting Ledger...</span>
+                      </>
+                    ) : (
+                      <span>Broadcast Payout</span>
+                    )}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsWithdrawModalOpen(false);
+                      setWithdrawalStatus(null);
+                    }}
+                    className="cursor-pointer py-3 px-5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-xs font-bold uppercase tracking-wider transition-all font-sans"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
