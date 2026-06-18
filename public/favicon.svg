@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </radialGradient>
+
+    <!-- Glowing Electric Blue/Cyan Gradient for Emblem -->
+    <linearGradient id="cyberCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="50%" stop-color="#4facfe" />
+      <stop offset="100%" stop-color="#0000ff" />
+    </linearGradient>
+
+    <!-- Backlight Glow Filter -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="24" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Inner Glow/Shadow for Depth -->
+    <filter id="innerShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feOffset dx="3" dy="3"/>
+      <feGaussianBlur stdDeviation="4" result="offset-blur"/>
+      <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
+      <feFlood flood-color="white" flood-opacity="0.6" result="color"/>
+      <feComposite operator="in" in="color" in2="inverse" result="shadow"/>
+      <feComposite operator="over" in="shadow" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Ring with Tech Nodes -->
+  <circle cx="256" cy="256" r="236" fill="#0A0E17" stroke="url(#cyberCyan)" stroke-width="8" />
+  <circle cx="256" cy="256" r="212" fill="none" stroke="#1E293B" stroke-width="4" stroke-dasharray="16 12" opacity="0.6" />
+
+  <!-- Inner Soft Glow Background -->
+  <circle cx="256" cy="256" r="180" fill="#070a13" filter="url(#neonGlow)" opacity="0.15" />
+
+  <!-- Dynamic Cybernetic "E" Logo representing Extreme & Energy -->
+  <!-- Combines sleek lightning cuts and modern web3 technology nodes -->
+  <g filter="url(#neonGlow)">
+    <!-- Base premium E shape -->
+    <path d="M 160 140
+             C 160 140, 360 140, 360 140
+             C 376 140, 384 152, 384 168
+             C 384 184, 376 196, 360 196
+             H 216
+             V 228
+             H 332
+             C 348 228, 356 240, 356 256
+             C 356 272, 348 284, 332 284
+             H 216
+             V 316
+             H 368
+             C 384 316, 392 328, 392 344
+             C 392 360, 384 372, 368 372
+             H 160
+             C 144 372, 132 360, 132 344
+             V 168
+             C 132 152, 144 140, 160 140 Z" 
+          fill="url(#cyberCyan)" 
+          filter="url(#innerShadow)" />
+
+    <!-- Corner Neon Connector Nodes to embody the web3 vibe -->
+    <circle cx="360" cy="168" r="14" fill="#E2F1FF" stroke="#00f2fe" stroke-width="3" />
+    <circle cx="332" cy="256" r="12" fill="#E2F1FF" stroke="#00f2fe" stroke-width="3" />
+    <circle cx="368" cy="344" r="14" fill="#E2F1FF" stroke="#00f2fe" stroke-width="3" />
+  </g>
+
+  <!-- High-tech diagonal hazard/energy stripes wrapping inner border slightly -->
+  <path d="M 120 120 L 140 100" stroke="#00f2fe" stroke-width="4" opacity="0.4" stroke-linecap="round" />
+  <path d="M 392 392 L 372 412" stroke="#00f2fe" stroke-width="4" opacity="0.4" stroke-linecap="round" />
+  <path d="M 392 120 L 372 100" stroke="#00f2fe" stroke-width="4" opacity="0.4" stroke-linecap="round" />
+  <path d="M 120 392 L 140 412" stroke="#00f2fe" stroke-width="4" opacity="0.4" stroke-linecap="round" />
+</svg>

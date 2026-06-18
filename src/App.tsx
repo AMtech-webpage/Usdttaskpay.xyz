@@ -5,6 +5,7 @@ import { HeroSection } from './components/HeroSection';
 import { AuthModal } from './components/AuthModal';
 import { EarningsDashboard } from './components/EarningsDashboard';
 import { DeveloperConsole } from './components/DeveloperConsole';
+import FAQSection from './components/FAQSection';
 import { ShieldAlert, BookOpen, ExternalLink, Mail, Github, Compass, Sparkles, Database } from 'lucide-react';
 
 export default function App() {
@@ -88,16 +89,19 @@ export default function App() {
             </div>
           </div>
         ) : currentPage === 'home' ? (
-          <HeroSection 
-            onStart={() => {
-              if (currentProfile) {
-                setCurrentPage('dashboard');
-              } else {
-                handleNavigateToAuth('signup');
-              }
-            }}
-            onNavigateToAuth={() => handleNavigateToAuth('login')}
-          />
+          <>
+            <HeroSection 
+              onStart={() => {
+                if (currentProfile) {
+                  setCurrentPage('dashboard');
+                } else {
+                  handleNavigateToAuth('signup');
+                }
+              }}
+              onNavigateToAuth={() => handleNavigateToAuth('login')}
+            />
+            <FAQSection />
+          </>
         ) : currentPage === 'auth' ? (
           <AuthModal 
             initialState={authInitialTab}
