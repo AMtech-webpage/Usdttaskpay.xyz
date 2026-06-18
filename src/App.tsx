@@ -7,12 +7,13 @@ import { EarningsDashboard } from './components/EarningsDashboard';
 import FAQSection from './components/FAQSection';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
+import { ContactView } from './components/ContactView';
 import { verifyUserSecurity, SecurityTelemetry } from './lib/security';
 import { ShieldAlert, BookOpen, ExternalLink, Mail, Github, Compass, Sparkles, Database, ShieldCheck, HelpCircle, RefreshCw, AlertOctagon } from 'lucide-react';
 
 export default function App() {
   const [currentProfile, setCurrentProfile] = useState<UserProfile | null>(null);
-  const [currentPage, setCurrentPage] = useState<'home' | 'dashboard' | 'auth' | 'privacy' | 'terms'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'dashboard' | 'auth' | 'privacy' | 'terms' | 'contact'>('home');
   const [authInitialTab, setAuthInitialTab] = useState<'login' | 'signup'>('login');
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
@@ -227,6 +228,11 @@ export default function App() {
           <TermsOfServiceView 
             onBack={() => setCurrentPage(currentProfile ? 'dashboard' : 'home')}
           />
+        ) : currentPage === 'contact' ? (
+          <ContactView 
+            currentProfile={currentProfile}
+            onBack={() => setCurrentPage(currentProfile ? 'dashboard' : 'home')}
+          />
         ) : currentPage === 'dashboard' && currentProfile ? (
           <EarningsDashboard 
             currentProfile={currentProfile}
@@ -291,6 +297,7 @@ export default function App() {
           <div className="border-t border-slate-900 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-mono text-slate-500">
             <span>© 2026 Watch2Earn Global Networks LTD. All rights reserved.</span>
             <div className="flex items-center space-x-4">
+              <span onClick={() => setCurrentPage('contact')} className="hover:text-cyan-400 font-bold text-emerald-400 cursor-pointer transition-colors duration-200">Help & Support Desk</span>
               <span onClick={() => setCurrentPage('terms')} className="hover:text-slate-300 hover:text-cyan-400 cursor-pointer transition-colors duration-200">Terms of Service</span>
               <span onClick={() => setCurrentPage('privacy')} className="hover:text-slate-300 hover:text-cyan-400 cursor-pointer transition-colors duration-200">Privacy Policy</span>
             </div>

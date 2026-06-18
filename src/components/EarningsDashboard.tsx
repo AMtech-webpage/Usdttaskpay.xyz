@@ -52,7 +52,7 @@ interface EarningsDashboardProps {
   onProfileChange: (updated: UserProfile) => void;
   onLogout: () => void;
   onOpenDeveloperPane: () => void;
-  onNavigateToLegal?: (page: 'terms' | 'privacy') => void;
+  onNavigateToLegal?: (page: 'terms' | 'privacy' | 'contact') => void;
 }
 
 export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
@@ -563,7 +563,16 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
               {/* Mobile Legal Submenu links */}
               <div className="border-t border-[#131924] pt-4 mt-4 space-y-1.5">
                 <span className="block font-mono text-[9px] uppercase tracking-wider text-slate-500 font-bold px-3">
-                  Legal Guidelines
+                  Resources & Support
+                </span>
+                <span 
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigateToLegal?.('contact');
+                  }}
+                  className="block w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:bg-slate-900/60 cursor-pointer transition-colors"
+                >
+                  Help & Contact Desk
                 </span>
                 <span 
                   onClick={() => {
