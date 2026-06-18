@@ -137,6 +137,116 @@ const setLocalData = <T>(key: string, data: T): void => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+async function ensureProfileExists(
+  userId: string,
+  userEmail: string,
+  userFullName: string,
+  referredByCode?: string
+): Promise<UserProfile> {
+  if (!supabase) {
+    throw new Error('Supabase client is not initialized');
+  }
+
+  // 1. Fetch current profile gracefully using maybeSingle
+  const { data: dbProfile, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('Database error in ensureProfileExists:', profileError.message);
+    throw profileError;
+  }
+
+  if (dbProfile) {
+    // If profile exists but is missing its own referral_code, update it
+    if (!dbProfile.referral_code) {
+      const simpleNameSlug = (dbProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
+      const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+      
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({ referral_code: autoReferralCode })
+        .eq('id', userId)
+        .select()
+        .maybeSingle();
+
+      if (!updateError && updatedProfile) {
+        return updatedProfile as UserProfile;
+      }
+    }
+    return dbProfile as UserProfile;
+  }
+
+  // 2. Profile is completely missing, build and insert a new row
+  console.log('Real profile missing in DB. Proactively creating profile for: ', userId);
+  const simpleNameSlug = userEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
+  const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+
+  // Find inviter user-id if referred_by_code is supplied
+  let resolvedReferredBy: string | null = null;
+  if (referredByCode) {
+    const { data: referrer, error: refError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('referral_code', referredByCode)
+      .maybeSingle();
+    
+    if (!refError && referrer) {
+      resolvedReferredBy = referrer.id;
+    }
+  }
+
+  const newProfile: any = {
+    id: userId,
+    email: userEmail,
+    full_name: userFullName,
+    balance: 0.0000,
+    total_earned: 0.0000,
+    total_platform_commission: 0.0000,
+    wallet_address: '',
+    created_at: new Date().toISOString(),
+    referred_by: resolvedReferredBy,
+    referral_code: autoReferralCode,
+    referral_earnings: 0.0000,
+    referral_count: 0
+  };
+
+  const { data: insertedProfile, error: insertError } = await supabase
+    .from('profiles')
+    .insert(newProfile)
+    .select()
+    .maybeSingle();
+
+  if (insertError) {
+    console.error('Failed to insert new profile row:', insertError.message);
+    throw insertError;
+  }
+
+  // Successfully inserted! Bump referred_count of inviter if applicable
+  if (resolvedReferredBy) {
+    try {
+      const { data: rProfile, error: rError } = await supabase
+        .from('profiles')
+        .select('referral_count')
+        .eq('id', resolvedReferredBy)
+        .maybeSingle();
+      
+      if (!rError && rProfile) {
+        await supabase
+          .from('profiles')
+          .update({ referral_count: (rProfile.referral_count || 0) + 1 })
+          .eq('id', resolvedReferredBy);
+      }
+    } catch (err) {
+      console.error('Failed to increment referrer count:', err);
+    }
+  }
+
+  return (insertedProfile || newProfile) as UserProfile;
+}
+
 // ==========================================
 // DUAL-MODE API CLIENT (REAL CLIENT / LOCAL EMULATOR)
 // ==========================================
@@ -147,16 +257,54 @@ export const api = {
       if (isSupabaseConfigured() && supabase) {
         // Safe signup configuration: passing 'full_name' to user_metadata
         // This ensures the custom database trigger can safely parse the raw metadata.
+        const referralCode = localStorage.getItem('w2e_referrer_code') || '';
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
               full_name: fullName,
+              referred_by_code: referralCode,
             },
           },
         });
         if (error) throw error;
+
+        if (data.user) {
+          try {
+            const profile = await ensureProfileExists(
+              data.user.id,
+              data.user.email || email,
+              fullName,
+              referralCode
+            );
+            return {
+              user: data.user,
+              session: data.session,
+              profile
+            };
+          } catch (profileError) {
+            console.error("Failed to build profile during signUp:", profileError);
+            return {
+              user: data.user,
+              session: data.session,
+              profile: {
+                id: data.user.id,
+                email: data.user.email || email,
+                full_name: fullName,
+                balance: 0.0000,
+                total_earned: 0.0000,
+                total_platform_commission: 0.0000,
+                wallet_address: '',
+                referral_code: '',
+                referral_earnings: 0.0000,
+                referral_count: 0,
+                created_at: new Date().toISOString()
+              } as UserProfile
+            };
+          }
+        }
+
         return data;
       } else {
         // Mobile fallback / simulated authentication
@@ -168,6 +316,31 @@ export const api = {
         }
 
         const mockUserId = `mock-user-${Math.random().toString(36).substring(2, 11)}`;
+
+        // Generate custom shareable invite link code for the new account
+        const simpleNameSlug = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+        const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 4)}`;
+
+        const localReferrerCode = localStorage.getItem('w2e_referrer_code') || undefined;
+        let resolvedReferredBy: string | undefined = undefined;
+
+        if (localReferrerCode) {
+          // Resolve referrer
+          const inviter = users.find((u) => u.profile?.referral_code === localReferrerCode || u.profile?.id === localReferrerCode || u.id === localReferrerCode);
+          if (inviter) {
+            resolvedReferredBy = inviter.id;
+            
+            // Bump referrer's count
+            const inviterProfileKey = `w2e_profile_${inviter.id}`;
+            const inviterProfile = getLocalData<UserProfile>(inviterProfileKey, inviter.profile);
+            if (inviterProfile) {
+              inviterProfile.referral_count = (inviterProfile.referral_count || 0) + 1;
+              setLocalData(inviterProfileKey, inviterProfile);
+              inviter.profile = inviterProfile;
+            }
+          }
+        }
+
         const newUserProfile: UserProfile = {
           id: mockUserId,
           email,
@@ -176,7 +349,11 @@ export const api = {
           total_earned: 0.0000,
           total_platform_commission: 0.0000,
           wallet_address: '',
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          referred_by: resolvedReferredBy,
+          referral_code: autoReferralCode,
+          referral_earnings: 0.0000,
+          referral_count: 0
         };
 
         const newAuthUser = {
@@ -184,6 +361,9 @@ export const api = {
           email,
           user_metadata: { full_name: fullName }
         };
+
+        const profileKey = `w2e_profile_${mockUserId}`;
+        setLocalData(profileKey, newUserProfile);
 
         users.push({ ...newAuthUser, password, profile: newUserProfile });
         setLocalData('w2e_users', users);
@@ -227,10 +407,17 @@ export const api = {
             balance: 0.00,
             total_earned: 0.00,
             total_platform_commission: 0.00,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            referral_earnings: 0.00,
+            referral_count: 0
           };
-          setLocalData(profileKey, profile);
         }
+        
+        if (!profile.referral_code) {
+          const simpleNameSlug = (profile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+          profile.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+        }
+        setLocalData(profileKey, profile);
 
         const session = {
           user: matched,
@@ -258,6 +445,13 @@ export const api = {
       if (sandboxSession && sandboxSession.is_sandbox_override) {
         const profileKey = `w2e_profile_${sandboxSession.user.id}`;
         const currentProfile = getLocalData<UserProfile>(profileKey, sandboxSession.profile);
+        if (!currentProfile.referral_code) {
+          const simpleNameSlug = (currentProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+          currentProfile.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+          currentProfile.referral_earnings = currentProfile.referral_earnings || 0;
+          currentProfile.referral_count = currentProfile.referral_count || 0;
+          setLocalData(profileKey, currentProfile);
+        }
         sandboxSession.profile = currentProfile;
         return sandboxSession;
       }
@@ -267,15 +461,17 @@ export const api = {
         if (error) throw error;
         
         if (data.session?.user) {
-          // Fetch additional profile data
-          const { data: dbProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.session.user.id)
-            .single();
-
-          if (profileError) {
-            console.error('Failed to sync real profile: ', profileError.message);
+          try {
+            // Fetch and ensure profile row exists synchronously/safely
+            const profile = await ensureProfileExists(
+              data.session.user.id,
+              data.session.user.email || '',
+              data.session.user.user_metadata?.full_name || 'Web3 Earn User',
+              data.session.user.user_metadata?.referred_by_code
+            );
+            return { user: data.session.user, profile };
+          } catch (profileError: any) {
+            console.error('Failed to sync real profile: ', profileError.message || profileError);
             // Return base user if profile retrieval fails
             return {
               user: data.session.user,
@@ -286,11 +482,12 @@ export const api = {
                 balance: 0.00,
                 total_earned: 0.00,
                 total_platform_commission: 0.00,
-                created_at: data.session.user.created_at
+                created_at: data.session.user.created_at,
+                referral_earnings: 0.00,
+                referral_count: 0
               } as UserProfile
             };
           }
-          return { user: data.session.user, profile: dbProfile as UserProfile };
         }
         return { user: null, profile: null };
       } else {
@@ -299,6 +496,13 @@ export const api = {
           // Keep profile synced from its dedicated key
           const profileKey = `w2e_profile_${session.user.id}`;
           const currentProfile = getLocalData<UserProfile>(profileKey, session.profile);
+          if (!currentProfile.referral_code) {
+            const simpleNameSlug = (currentProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+            currentProfile.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+            currentProfile.referral_earnings = currentProfile.referral_earnings || 0;
+            currentProfile.referral_count = currentProfile.referral_count || 0;
+            setLocalData(profileKey, currentProfile);
+          }
           session.profile = currentProfile;
         }
         return session || { user: null, profile: null };
@@ -307,20 +511,48 @@ export const api = {
 
     async bypassIntoSandbox(email: string, fullName: string) {
       const mockUserId = `mock-user-${Math.random().toString(36).substring(2, 11)}`;
+      const emailLocal = email || 'sandbox@w2e.network';
+      const simpleNameSlug = emailLocal.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+      const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 4)}`;
+
+      const localReferrerCode = localStorage.getItem('w2e_referrer_code') || undefined;
+      let resolvedReferredBy: string | undefined = undefined;
+
+      if (localReferrerCode) {
+        const users = getLocalData<any[]>('w2e_users', []);
+        const inviter = users.find((u) => u.profile?.referral_code === localReferrerCode || u.profile?.id === localReferrerCode || u.id === localReferrerCode);
+        if (inviter) {
+          resolvedReferredBy = inviter.id;
+          
+          const inviterProfileKey = `w2e_profile_${inviter.id}`;
+          const inviterProfile = getLocalData<UserProfile>(inviterProfileKey, inviter.profile);
+          if (inviterProfile) {
+            inviterProfile.referral_count = (inviterProfile.referral_count || 0) + 1;
+            setLocalData(inviterProfileKey, inviterProfile);
+            inviter.profile = inviterProfile;
+            setLocalData('w2e_users', users);
+          }
+        }
+      }
+
       const newUserProfile: UserProfile = {
         id: mockUserId,
-        email: email || 'sandbox@w2e.network',
+        email: emailLocal,
         full_name: fullName || 'Sandbox Pioneer',
         balance: 1.8500, // Seeding with 1.85 USDT makes it incredibly fast to verify video earnings and hit the 2.0 USDT withdrawal threshold!
         total_earned: 1.8500,
         total_platform_commission: 0.4625,
         wallet_address: '',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        referred_by: resolvedReferredBy,
+        referral_code: autoReferralCode,
+        referral_earnings: 0.0000,
+        referral_count: 0
       };
 
       const newAuthUser = {
         id: mockUserId,
-        email: email || 'sandbox@w2e.network',
+        email: emailLocal,
         user_metadata: { full_name: fullName || 'Sandbox Pioneer' }
       };
 
@@ -343,16 +575,33 @@ export const api = {
   profiles: {
     async getProfile(userId: string): Promise<UserProfile> {
       if (isSupabaseConfigured() && supabase) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        if (error) throw error;
-        return data as UserProfile;
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          if (error) throw error;
+          
+          if (data) {
+            return data as UserProfile;
+          }
+          
+          // Fallback: proactively load auth session state to seed profile metadata
+          const { data: sessionData } = await supabase.auth.getSession();
+          const authUser = sessionData?.session?.user;
+          return await ensureProfileExists(
+            userId,
+            authUser?.email || 'anonymous@w2e.network',
+            authUser?.user_metadata?.full_name || 'Web3 Earn User'
+          );
+        } catch (e) {
+          console.error('getProfile catch-on-error:', e);
+          throw e;
+        }
       } else {
         const profileKey = `w2e_profile_${userId}`;
-        return getLocalData<UserProfile>(profileKey, {
+        const profile = getLocalData<UserProfile>(profileKey, {
           id: userId,
           email: 'anonymous@w2e.network',
           full_name: 'Simulated User',
@@ -361,6 +610,15 @@ export const api = {
           total_platform_commission: 0.0000,
           created_at: new Date().toISOString()
         });
+
+        if (!profile.referral_code) {
+          const simpleNameSlug = (profile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+          profile.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+          profile.referral_earnings = profile.referral_earnings || 0;
+          profile.referral_count = profile.referral_count || 0;
+          setLocalData(profileKey, profile);
+        }
+        return profile;
       }
     },
 
@@ -371,8 +629,9 @@ export const api = {
           .update({ wallet_address: walletAddress })
           .eq('id', userId)
           .select()
-          .single();
+          .maybeSingle();
         if (error) throw error;
+        if (!data) throw new Error('UserProfile not found during wallet update');
         return data as UserProfile;
       } else {
         const profileKey = `w2e_profile_${userId}`;
@@ -397,10 +656,11 @@ export const api = {
         // 1. Fetch current profile
         const { data: current, error: getErr } = await supabase
           .from('profiles')
-          .select('balance, total_earned, total_platform_commission')
+          .select('balance, total_earned, total_platform_commission, referred_by, full_name')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
         if (getErr) throw getErr;
+        if (!current) throw new Error('UserProfile not found during reward fetching');
 
         const newBalance = (current.balance || 0) + rewardAmount;
         const newTotalEarned = (current.total_earned || 0) + rewardAmount;
@@ -416,9 +676,10 @@ export const api = {
           })
           .eq('id', userId)
           .select()
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!data) throw new Error('UserProfile not found during rewards update');
 
         // 3. Create a transaction audit log in Supabase
         await supabase
@@ -432,6 +693,47 @@ export const api = {
             description,
             tx_hash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
           });
+
+        // 4. Dispatch 5% passive referral reward bonus to inviter if referred_by is set
+        if (current.referred_by) {
+          try {
+            const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
+            const { data: referrer, error: refErr } = await supabase
+              .from('profiles')
+              .select('balance, total_earned, referral_earnings')
+              .eq('id', current.referred_by)
+              .maybeSingle();
+
+            if (!refErr && referrer) {
+              const updatedRefBalance = (referrer.balance || 0) + referralBonus;
+              const updatedRefTotal = (referrer.total_earned || 0) + referralBonus;
+              const updatedRefEarnings = (referrer.referral_earnings || 0) + referralBonus;
+
+              await supabase
+                .from('profiles')
+                .update({
+                  balance: parseFloat(updatedRefBalance.toFixed(6)),
+                  total_earned: parseFloat(updatedRefTotal.toFixed(6)),
+                  referral_earnings: parseFloat(updatedRefEarnings.toFixed(6))
+                })
+                .eq('id', current.referred_by);
+
+              // Register transaction log for inviter's referral payout split
+              await supabase
+                .from('transactions')
+                .insert({
+                  user_id: current.referred_by,
+                  type: 'microtask',
+                  amount: referralBonus,
+                  status: 'completed',
+                  description: `5% Invite Yield from ${current.full_name || 'Invitee'} ad-stream`,
+                  tx_hash: `0x${Math.random().toString(36).substring(2, 15)}`
+                });
+            }
+          } catch (e) {
+            console.warn('Real Supabase Referral system split failure: ', e);
+          }
+        }
 
         return data as UserProfile;
       } else {
@@ -470,6 +772,41 @@ export const api = {
         transactions.unshift(newTx);
         setLocalData(txKey, transactions);
 
+        // Simulated passive referral payout to inviter
+        if (profile.referred_by) {
+          try {
+            const referrerId = profile.referred_by;
+            const referrerKey = `w2e_profile_${referrerId}`;
+            const referrerProfile = getLocalData<UserProfile | null>(referrerKey, null);
+
+            if (referrerProfile) {
+              const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
+              referrerProfile.balance = parseFloat((referrerProfile.balance + referralBonus).toFixed(6));
+              referrerProfile.total_earned = parseFloat((referrerProfile.total_earned + referralBonus).toFixed(6));
+              referrerProfile.referral_earnings = parseFloat(((referrerProfile.referral_earnings || 0) + referralBonus).toFixed(6));
+              setLocalData(referrerKey, referrerProfile);
+
+              // Inject referral bonus item into inviter's transaction ledger
+              const refTxKey = `w2e_transactions_${referrerId}`;
+              const refTransactions = getLocalData<Transaction[]>(refTxKey, []);
+              refTransactions.unshift({
+                id: `tx-bonus-${Math.random().toString(36).substring(2, 9)}`,
+                user_id: referrerId,
+                type: 'microtask',
+                amount: referralBonus,
+                status: 'completed',
+                tx_hash: `0x${Array.from({length: 40}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`,
+                created_at: new Date().toISOString(),
+                description: `5% Invite Yield from ${profile.full_name || 'Invitee'} watch`
+              });
+              setLocalData(refTxKey, refTransactions);
+              console.log('Passive 5% referral bonus of', referralBonus, 'USDT credited to inviter:', referrerId);
+            }
+          } catch (refSimErr) {
+            console.error('Error applying simulated referral bonus:', refSimErr);
+          }
+        }
+
         return profile;
       }
     },
@@ -482,8 +819,9 @@ export const api = {
           .from('profiles')
           .select('balance, email, full_name')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
         if (getErr) throw getErr;
+        if (!current) throw new Error('UserProfile not found for withdrawal processing.');
 
         if ((current.balance || 0) < amount) {
           throw new Error('Insufficient balance to withdraw.');
@@ -500,9 +838,10 @@ export const api = {
           })
           .eq('id', userId)
           .select()
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!data) throw new Error('UserProfile not found during withdrawal balance update.');
 
         // 3. Create a pending/completed withdrawal transaction log
         await supabase

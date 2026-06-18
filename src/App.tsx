@@ -14,8 +14,16 @@ export default function App() {
   const [authInitialTab, setAuthInitialTab] = useState<'login' | 'signup'>('login');
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
-  // Check active user sessions on start
+  // Check active user sessions and record referrers on start
   useEffect(() => {
+    // Capture referral code if present in the URL
+    const params = new URLSearchParams(window.location.search);
+    const referralCode = params.get('ref') || params.get('invite') || params.get('referral');
+    if (referralCode) {
+      localStorage.setItem('w2e_referrer_code', referralCode);
+      console.log('Captured inviter referral code:', referralCode);
+    }
+
     const syncSession = async () => {
       setIsSessionLoading(true);
       try {

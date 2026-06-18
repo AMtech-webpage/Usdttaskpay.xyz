@@ -21,9 +21,29 @@ import {
   Flame,
   Copy,
   Loader2,
-  X
+  X,
+  Users,
+  Gift,
+  UserPlus,
+  Menu,
+  LayoutDashboard,
+  Settings,
+  PlusCircle
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from 'recharts';
+import { OffersView } from './dashboard/OffersView';
+import { TasksView } from './dashboard/TasksView';
+import { WithdrawView } from './dashboard/WithdrawView';
+import { SettingsView } from './dashboard/SettingsView';
 
 interface EarningsDashboardProps {
   currentProfile: UserProfile;
@@ -43,6 +63,12 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Responsive tab and dialog state helpers
+  const [dashboardTab, setDashboardTab] = useState<'dashboard' | 'offers' | 'tasks' | 'withdraw' | 'settings'>('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+
   // Active watching ad simulator
   const [activeAd, setActiveAd] = useState<AdCampaign | null>(null);
   const [countdown, setCountdown] = useState(0);
@@ -56,8 +82,173 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const [withdrawalStatus, setWithdrawalStatus] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [networkType, setNetworkType] = useState<'erc20' | 'bep20' | 'trc20'>('trc20');
 
+  // Settings form states
+  const [settingsWallet, setSettingsWallet] = useState(currentProfile.wallet_address || '');
+  const [settingsStatus, setSettingsStatus] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+
   // Copied alert state
   const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
+
+  // Referral system states
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isSimulatingInvite, setIsSimulatingInvite] = useState(false);
+
+  const inviteLink = `${window.location.origin}${window.location.pathname}?ref=${currentProfile.referral_code || currentProfile.id}`;
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const getTrendData = () => {
+    const data: { date: string; amount: number }[] = [];
+    const now = new Date();
+    
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const dateQueryStr = d.toISOString().split('T')[0];
+      
+      let dayAmount = 0;
+      transactions.forEach((tx) => {
+        if (tx.status === 'completed' && tx.amount > 0) {
+          const txDateStr = new Date(tx.created_at).toISOString().split('T')[0];
+          if (txDateStr === dateQueryStr) {
+            dayAmount += tx.amount;
+          }
+        }
+      });
+
+      data.push({
+        date: dateStr,
+        amount: parseFloat(dayAmount.toFixed(4))
+      });
+    }
+
+    const hasTxPoints = data.some((item) => item.amount > 0);
+    if (!hasTxPoints && currentProfile.total_earned > 0) {
+      const total = currentProfile.total_earned;
+      const pieces = 5;
+      const share = total / pieces;
+      [5, 12, 18, 24, 28].forEach((idx, i) => {
+        if (data[idx]) {
+          data[idx].amount = parseFloat((share * (1 + (i % 3) * 0.1)).toFixed(4));
+        }
+      });
+    }
+    return data;
+  };
+
+  const handleSimulateInvite = async () => {
+    if (isSimulatingInvite) return;
+    setIsSimulatingInvite(true);
+    try {
+      const mockNames = [
+        "Gold_Satoshi", "Web3_Whale", "Yield_Hunter", "Ether_Chef", 
+        "Alpha_Surfer", "Staking_King", "USDT_Collector", "DeFi_Ninja"
+      ];
+      const randomName = mockNames[Math.floor(Math.random() * mockNames.length)] + '_' + Math.random().toString(36).substring(2, 5);
+      const mockEmail = `${randomName.toLowerCase()}@w2earntest.net`;
+      const mockUserId = `mock-ref-${Math.random().toString(36).substring(2, 11)}`;
+      
+      const inviteeProfile = {
+        id: mockUserId,
+        email: mockEmail,
+        full_name: randomName,
+        balance: 0.1000,
+        total_earned: 0.1000,
+        total_platform_commission: 0.0250,
+        wallet_address: '',
+        created_at: new Date().toISOString(),
+        referred_by: currentProfile.id,
+        referral_code: `ref_${Math.random().toString(36).substring(2, 6)}`,
+        referral_earnings: 0.0000,
+        referral_count: 0
+      };
+
+      // 1. Put this mock profile in localStorage
+      localStorage.setItem(`w2e_profile_${mockUserId}`, JSON.stringify(inviteeProfile));
+
+      // 2. Load and add to mock users list
+      const usersList = JSON.parse(localStorage.getItem('w2e_users') || '[]');
+      usersList.push({
+        id: mockUserId,
+        email: mockEmail,
+        user_metadata: { full_name: randomName },
+        profile: inviteeProfile
+      });
+      localStorage.setItem('w2e_users', JSON.stringify(usersList));
+
+      // 3. Update the inviter's referral count
+      const updatedProfile = {
+        ...currentProfile,
+        referral_count: (currentProfile.referral_count || 0) + 1
+      };
+      
+      localStorage.setItem(`w2e_profile_${currentProfile.id}`, JSON.stringify(updatedProfile));
+      onProfileChange(updatedProfile);
+
+      // 4. Create action logs & transactions for the inviter!
+      const txKey = `w2e_transactions_${currentProfile.id}`;
+      const userTxs = JSON.parse(localStorage.getItem(txKey) || '[]');
+      userTxs.unshift({
+        id: `tx-invite-joined-${Math.random().toString(36).substring(2, 9)}`,
+        user_id: currentProfile.id,
+        type: 'microtask',
+        amount: 0.0000,
+        status: 'completed',
+        tx_hash: `0x${Array.from({length: 40}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`,
+        created_at: new Date().toISOString(),
+        description: `🎉 Invitee ${randomName} connected via your link`
+      });
+      localStorage.setItem(txKey, JSON.stringify(userTxs));
+      setTransactions(userTxs);
+
+      // 5. Automatically simulate passive ad-streaming rewards after 4 seconds!
+      setTimeout(async () => {
+        const adRevenue = 0.5000; // Total advertiser payout
+        const userShare = 0.4000; // 80% kept by user
+        
+        // Update mock invitee balance
+        inviteeProfile.balance = parseFloat((inviteeProfile.balance + userShare).toFixed(6));
+        inviteeProfile.total_earned = parseFloat((inviteeProfile.total_earned + userShare).toFixed(6));
+        localStorage.setItem(`w2e_profile_${mockUserId}`, JSON.stringify(inviteeProfile));
+
+        // Update inviter profile with 5% passive bonus split
+        const bonus = parseFloat((userShare * 0.05).toFixed(6)); // 5% of ad payout = 0.02 USDT bonus!
+        const latestProfile = JSON.parse(localStorage.getItem(`w2e_profile_${currentProfile.id}`) || JSON.stringify(updatedProfile));
+        latestProfile.balance = parseFloat((latestProfile.balance + bonus).toFixed(6));
+        latestProfile.total_earned = parseFloat((latestProfile.total_earned + bonus).toFixed(6));
+        latestProfile.referral_earnings = parseFloat(((latestProfile.referral_earnings || 0) + bonus).toFixed(6));
+        
+        localStorage.setItem(`w2e_profile_${currentProfile.id}`, JSON.stringify(latestProfile));
+        onProfileChange(latestProfile);
+
+        // Inject referral yield log
+        const updatedTxs = JSON.parse(localStorage.getItem(txKey) || '[]');
+        updatedTxs.unshift({
+          id: `tx-invite-bonus-${Math.random().toString(36).substring(2, 9)}`,
+          user_id: currentProfile.id,
+          type: 'microtask',
+          amount: bonus,
+          status: 'completed',
+          tx_hash: `0x${Array.from({length: 40}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`,
+          created_at: new Date().toISOString(),
+          description: `⚡ Received 5% Referral Payout from ${randomName}'s High-Yield Stream`
+        });
+        localStorage.setItem(txKey, JSON.stringify(updatedTxs));
+        setTransactions(updatedTxs);
+      }, 4000);
+
+    } catch (e) {
+      console.error('Failed to simulate referral registration:', e);
+    } finally {
+      setIsSimulatingInvite(false);
+    }
+  };
 
   const isProd = isSupabaseConfigured();
 
@@ -205,6 +396,22 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     }
   };
 
+  const handleUpdateWallet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsStatus(null);
+    setSettingsLoading(true);
+    try {
+      const updatedProfile = await api.profiles.updateProfileWallet(currentProfile.id, settingsWallet);
+      onProfileChange(updatedProfile);
+      setWithdrawAddress(settingsWallet); // Synchronize state with withdrawal form recipient
+      setSettingsStatus({ type: 'success', text: 'Decentralized USDT Wallet address updated successfully.' });
+    } catch (err: any) {
+      setSettingsStatus({ type: 'error', text: err.message || 'Failed to update wallet address.' });
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedTxId(id);
@@ -215,417 +422,323 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const aggregateTotalEarned = currentProfile.total_earned;
   const aggregateCommissionPaid = currentProfile.total_platform_commission;
 
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'offers', label: 'Offers', icon: Play },
+    { id: 'tasks', label: 'Task', icon: Smartphone },
+    { id: 'withdraw', label: 'Withdraw', icon: Wallet },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ] as const;
+
+  const renderNavLinks = (closeMobileMenu: boolean) => {
+    return (
+      <div className="space-y-1.5">
+        {navItems.map((item) => {
+          const IconComponent = item.icon;
+          const isActive = dashboardTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setDashboardTab(item.id);
+                if (closeMobileMenu) {
+                  setIsMobileMenuOpen(false);
+                }
+              }}
+              className={`cursor-pointer w-full flex items-center space-x-3 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
+                isActive
+                  ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900/40 border border-transparent'
+              }`}
+            >
+              <IconComponent className={`h-4 w-4 shrink-0 ${isActive ? 'text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
+              <span className="font-sans leading-none">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderAddTaskCTA = (closeMobileMenu: boolean) => {
+    return (
+      <button
+        onClick={() => {
+          if (closeMobileMenu) {
+            setIsMobileMenuOpen(false);
+          }
+          setIsAddTaskModalOpen(true);
+        }}
+        className="group w-full cursor-pointer mt-4 flex items-center space-x-3 rounded-xl border border-dashed border-cyan-500/25 bg-cyan-950/15 hover:bg-cyan-950/30 px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-cyan-400 hover:border-cyan-400/50 transition-all shadow-lg duration-300"
+      >
+        <PlusCircle className="h-4.5 w-4.5 shrink-0 text-cyan-300 group-hover:rotate-90 transition-transform duration-300" />
+        <span>🚀 Add Your Task</span>
+      </button>
+    );
+  };
+
   return (
-    <div className="relative bg-cyber-black min-h-[calc(100vh-4rem)] pb-16">
+    <div className="relative bg-[#0A0E17] min-h-[calc(100vh-4rem)] flex flex-col lg:flex-row select-none">
       {/* Background cyber structures */}
       <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
 
-      {/* Main Grid View */}
-      <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
-        
-        {/* User Greeting Title */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl font-black text-white sm:text-3xl">
-              Web3 Earnings Panel
-            </h1>
-            <p className="text-sm text-slate-400">
-              Welcome back, <span className="text-cyan-400 font-semibold">{currentProfile.full_name}</span>. Trace your attention revenue split from this control panel.
-            </p>
-          </div>
+      {/* MOBILE NAV BANNER */}
+      <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 backdrop-blur-md px-4 py-3.5 w-full shrink-0">
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="p-1.5 -ml-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+        >
+          <Menu className="h-6 w-6 text-cyan-400" />
+        </button>
+        <div className="flex items-center space-x-1.5">
+          <span className="font-display text-sm font-black text-white">Watch<span className="text-cyan-450 bg-gradient-to-r from-cyan-400 to-electric-blue bg-clip-text text-transparent">2Earn</span></span>
+          <span className="text-[9px] bg-cyan-400/10 text-cyan-400 px-1.5 py-0.5 rounded font-mono font-bold">80% Share</span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="font-mono text-xs font-bold text-emerald-400 animate-pulse">
+            {currentProfile.balance.toFixed(4)} USDT
+          </span>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={onOpenDeveloperPane}
-              className="cursor-pointer items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all duration-300 flex bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              <span>Supabase Schema Rules</span>
-            </button>
-          </div>
+      {/* PERSISTENT SIDEBAR - DESKTOP */}
+      <aside className="hidden lg:flex flex-col w-64 border-r border-slate-800/80 bg-[#0C1221]/40 p-6 space-y-8 select-none shrink-0 z-20">
+        <div className="space-y-1">
+          <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#06B6D4]">Control Console</span>
+          <p className="text-[10px] text-slate-400 font-medium font-sans">Extreme v2.4 Portal</p>
         </div>
 
-        {/* Triple Summary Cards (Bento style) */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-8">
-          
-          {/* Main Balance Display Card (span 6) */}
-          <div className="md:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
-            
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[10px] text-cyan-400 font-mono font-bold uppercase tracking-widest">Available Wallet Balance</span>
-                <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded font-mono font-bold">80% User Yield</span>
-              </div>
-              <div className="text-4xl font-mono font-black tracking-tighter text-white">
-                {currentProfile.balance.toFixed(4)} <span className="text-sm font-semibold text-cyan-400/80">USDT</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                Min. threshold of <strong className="text-white">2.0000 USDT</strong> applies for secure off-chain blockchain routing.
-              </p>
-            </div>
+        <nav className="flex-1 space-y-2">
+          {renderNavLinks(false)}
+          {renderAddTaskCTA(false)}
+        </nav>
 
-            <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/5 font-mono">
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Accumulated</p>
-                <p className="font-bold text-sm text-slate-200">{aggregateTotalEarned.toFixed(4)} USDT</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Attention share</p>
-                <p className="font-bold text-sm text-emerald-400">80/20 Contract</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Cumulative Earned Card (span 3) */}
-          <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">All-Time Revenue</span>
-              </div>
-              <p className="text-2xl font-mono font-bold text-white tracking-tight">{aggregateTotalEarned.toFixed(4)}</p>
-              <p className="text-[10px] text-slate-400 mt-1">Total revenue converted via verified video streams & tasks.</p>
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
-              <CheckCircle className="h-3 w-3 shrink-0" />
-              <span>Full Ledger Synced</span>
-            </div>
-          </div>
-
-          {/* House Platform Fee card (span 3) */}
-          <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Platform Commission</span>
-              </div>
-              <p className="text-2xl font-mono font-bold text-cyan-400 tracking-tight">{aggregateCommissionPaid.toFixed(4)} <span className="text-xs text-slate-400 font-sans">USDT</span></p>
-              <p className="text-[10px] text-slate-400 mt-1">20% fee reserved for routing protocols and cloud server databases.</p>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-              <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
-              <span>20% Model Verified</span>
-            </div>
-          </div>
-
+        <div className="border-t border-slate-900 pt-4 font-mono text-[9px] text-slate-500 space-y-0.5">
+          <p className="truncate">User: {currentProfile.full_name}</p>
+          <p className="text-cyan-500/80">Role: Pro Streamer</p>
         </div>
+      </aside>
 
-        {/* Main Columns layout */}
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          
-          {/* LEFT COLUMN: WATCH SECTION AND SOCIAL TASKS (SPAN 7) */}
-          <div className="lg:col-span-7 space-y-10">
-            
-            {/* WATCH TO EARN GRID */}
-            <div>
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Play className="h-5 w-5 text-cyan-400" />
-                  <h2 className="font-display text-xl font-bold text-white">Watch-to-Earn (Ad Streams)</h2>
-                </div>
-                <span className="rounded-full bg-cyan-950/50 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest leading-none">
-                  Available Streams
-                </span>
+      {/* SLIDE-OUT MOBILE DRAWER NAV */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          {/* Backdrop overlay */}
+          <div 
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
+          />
+
+          {/* Drawer content drawer */}
+          <div className="relative flex flex-col w-72 max-w-sm h-full bg-[#0A0E17] border-r border-[#161b28] p-6 space-y-8 shadow-2xl z-10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5">
+                <span className="font-display text-base font-black text-white">Watch<span className="text-cyan-400 bg-gradient-to-r from-cyan-400 to-electric-blue bg-clip-text text-transparent">2Earn</span></span>
               </div>
-
-              {isLoading ? (
-                <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/10">
-                  <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
-                </div>
-              ) : campaigns.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-800 p-8 text-center text-slate-500 text-sm">
-                  No active ad campaigns available at this hour. Check back shortly.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {campaigns.map((camp) => (
-                    <div 
-                      key={camp.id} 
-                      className="group overflow-hidden rounded-xl border border-glow bg-slate-950/60 hover:scale-[1.01] transition-all duration-300"
-                    >
-                      {/* Image Thumbnail wrapper */}
-                      <div className="relative h-40 overflow-hidden bg-slate-900">
-                        <img 
-                          src={camp.thumbnail} 
-                          alt={camp.title}
-                          referrerPolicy="no-referrer"
-                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                        
-                        <span className="absolute bottom-3 left-3 rounded bg-slate-900/90 border border-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-cyan-400">
-                          {camp.video_category}
-                        </span>
-
-                        <span className="absolute bottom-3 right-3 rounded bg-slate-950/90 border border-slate-800/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-300">
-                          {camp.duration} seconds
-                        </span>
-                      </div>
-
-                      {/* Content */}
-                      <div className="p-4">
-                        <h3 className="line-clamp-2 text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
-                          {camp.title}
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-500 font-mono">By: {camp.advertiser}</p>
-
-                        {/* Split values */}
-                        <div className="mt-4 flex items-center justify-between border-t border-slate-900 pt-3">
-                          <div className="flex flex-col text-slate-400">
-                            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Your Clean Yield (80%)</span>
-                            <span className="font-display text-sm font-black text-emerald-400">+{camp.user_share.toFixed(4)} USDT</span>
-                          </div>
-
-                          <button
-                            onClick={() => handleWatchAd(camp)}
-                            className="cursor-pointer flex items-center space-x-1.5 rounded-lg bg-gradient-to-r from-electric-blue to-cyan-500 px-3 py-2 text-xs font-bold text-white hover:brightness-110 transition-all shadow-md shadow-electric-blue/10"
-                          >
-                            <Play className="h-3 w-3 shrink-0" />
-                            <span>Watch Ad</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            {/* MICRO TASKS SECTION */}
-            <div>
-              <div className="mb-6 flex items-center space-x-2">
-                <Smartphone className="h-5 w-5 text-cyan-300" />
-                <h2 className="font-display text-xl font-bold text-white">Micro-Tasks & Web3 Integrations</h2>
-              </div>
+            <nav className="flex-grow space-y-2">
+              {renderNavLinks(true)}
+              {renderAddTaskCTA(true)}
+            </nav>
 
-              {isLoading ? (
-                <div className="flex h-20 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/10">
-                  <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
-                </div>
-              ) : tasks.length === 0 ? (
-                <p className="text-sm text-slate-500">No pending micro-tasks available.</p>
-              ) : (
-                <div className="space-y-3">
-                  {tasks.map((task) => (
-                    <div 
-                      key={task.id} 
-                      className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border border-glow-blue transition-all ${
-                        task.completed 
-                          ? 'border-emerald-500/20 bg-emerald-950/10' 
-                          : 'border-slate-800 bg-slate-950/50'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase ${
-                            task.type === 'twitter' 
-                              ? 'bg-sky-500/10 text-sky-400' 
-                              : task.type === 'telegram'
-                              ? 'bg-blue-500/10 text-blue-400'
-                              : 'bg-red-500/10 text-red-500'
-                          }`}>
-                            {task.type}
-                          </span>
-                          <h4 className="text-sm font-semibold text-slate-200">{task.title}</h4>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-400 max-w-lg leading-relaxed">{task.description}</p>
-                      </div>
-
-                      <div className="flex items-center space-x-3 self-end sm:self-auto shrink-0 pt-2 sm:pt-0">
-                        <div className="text-right">
-                          <span className="block text-[9px] font-mono text-slate-500">Yield (80%)</span>
-                          <span className={`font-display text-sm font-bold ${
-                            task.completed ? 'text-slate-500' : 'text-emerald-400'
-                          }`}>
-                            +{task.reward.toFixed(4)} USDT
-                          </span>
-                        </div>
-
-                        {task.completed ? (
-                          <div className="flex items-center space-x-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            <span>Claimed</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleCompleteTask(task)}
-                            className="cursor-pointer flex items-center space-x-1.5 rounded-lg bg-slate-900 border border-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 transition-colors"
-                          >
-                            <span>Verify Task</span>
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="border-t border-slate-900 pt-4 font-mono text-[9px] text-slate-550">
+              <p className="truncate">Session: {currentProfile.email}</p>
+              <p className="text-cyan-600">Secure AES Split Ledger</p>
             </div>
-
           </div>
+        </div>
+      )}
 
-          {/* RIGHT COLUMN: WITHDRAW FORM & HISTORY (SPAN 5) */}
-          <div className="lg:col-span-5 space-y-10">
-            
-            {/* INSTANT WITHDRAW PANEL */}
-            <div className="rounded-2xl border border-glow bg-slate-950/40 p-6 backdrop-blur-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Wallet className="h-5 w-5 text-cyan-400" />
-                  <h3 className="font-display font-extrabold text-lg text-white">Decentralized Payouts</h3>
-                </div>
-                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-emerald-400 uppercase">
-                  Instant Signature
-                </span>
+      {/* MAIN VIEW CONTENT CONTAINER */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 z-10 w-full">
+        {dashboardTab === 'dashboard' && (
+          <div className="space-y-8">
+            {/* User Greeting Title */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h1 className="font-display text-2xl font-black text-white sm:text-3xl">
+                  Web3 Earnings Panel
+                </h1>
+                <p className="text-sm text-slate-400">
+                  Welcome back, <span className="text-cyan-400 font-semibold">{currentProfile.full_name}</span>. Trace your attention revenue split from this control panel.
+                </p>
               </div>
 
-              <p className="text-xs text-slate-400 leading-normal mb-4">
-                Deploy accumulated USDT tokens directly to your external address. Supported blockchains operate at standard gas scales instantly.
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={onOpenDeveloperPane}
+                  className="cursor-pointer items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all duration-300 flex bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span>Supabase Schema Rules</span>
+                </button>
+              </div>
+            </div>
 
-              {/* Status Notice */}
-              {withdrawalStatus && (
-                <div className={`p-4 rounded-xl text-xs font-medium mb-4 leading-relaxed flex items-start space-x-2.5 ${
-                  withdrawalStatus.type === 'success' 
-                    ? 'bg-emerald-950/20 border border-emerald-500/20 text-emerald-300' 
-                    : 'bg-red-950/20 border border-red-500/20 text-red-300'
-                }`}>
-                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{withdrawalStatus.text}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleWithdraw} className="space-y-4">
-                {/* Network Selection */}
-                <div>
-                  <label className="block text-[10px] font-mono font-semibold tracking-wide text-slate-500 uppercase mb-2">
-                    Withdrawal Chain Network
-                  </label>
-                  <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-900/60 p-1 border border-slate-900">
-                    <button
-                      type="button"
-                      onClick={() => setNetworkType('trc20')}
-                      className={`cursor-pointer py-1.5 rounded-md text-[10px] font-semibold transition-all ${
-                        networkType === 'trc20'
-                          ? 'bg-slate-800 text-cyan-400 font-bold border border-slate-700/60'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      TRC-20 (Tron)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkType('bep20')}
-                      className={`cursor-pointer py-1.5 rounded-md text-[10px] font-semibold transition-all ${
-                        networkType === 'bep20'
-                          ? 'bg-slate-800 text-cyan-400 font-bold border border-slate-700/60'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      BEP-20 (BSC)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkType('erc20')}
-                      className={`cursor-pointer py-1.5 rounded-md text-[10px] font-semibold transition-all ${
-                        networkType === 'erc20'
-                          ? 'bg-slate-800 text-cyan-400 font-bold border border-slate-700/60'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      ERC-20 (Eth)
-                    </button>
-                  </div>
-                </div>
-
-                {/* USDT Wallet Address */}
-                <div>
-                  <label className="block text-[10px] font-mono font-semibold tracking-wide text-slate-500 uppercase mb-2">
-                    Recipient USDT Wallet Address
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. TR7NHqjeEToMxFR8yF1DcNH... or 0x8a1c..."
-                    value={withdrawAddress}
-                    onChange={(e) => setWithdrawAddress(e.target.value)}
-                    className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs text-white placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* Amount to withdraw */}
+            {/* Triple Summary Cards (Bento style) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+              {/* Main Balance Display Card (span 6) */}
+              <div className="md:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+                
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <label className="block text-[10px] font-mono font-semibold tracking-wide text-slate-500 uppercase">
-                      Amount to Withdraw (USDT)
-                    </label>
-                    <span 
-                      onClick={() => setWithdrawAmount(currentProfile.balance.toString())}
-                      className="cursor-pointer text-[10px] font-mono text-cyan-400 hover:underline hover:text-cyan-300"
-                    >
-                      Max: {currentProfile.balance.toFixed(4)} USDT
-                    </span>
+                    <span className="text-[10px] text-cyan-400 font-mono font-bold uppercase tracking-widest">Available Wallet Balance</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded font-mono font-bold">80% User Yield</span>
                   </div>
+                  <div className="text-4xl font-mono font-black tracking-tighter text-white">
+                    {currentProfile.balance.toFixed(4)} <span className="text-sm font-semibold text-cyan-400/80">USDT</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    Min. threshold of <strong className="text-white">2.0000 USDT</strong> applies for secure off-chain blockchain routing.
+                  </p>
                   
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      required
-                      placeholder="e.g. 5.000"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 p-3 pr-16 text-xs text-white placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
+                  <div className="mt-4 flex">
+                    <button
+                      onClick={() => {
+                        setWithdrawalStatus(null);
+                        setIsWithdrawModalOpen(true);
+                      }}
+                      className="cursor-pointer w-full flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-electric-blue hover:brightness-110 active:scale-[0.98] transition-all px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 border border-cyan-400/20 group"
+                    >
+                      <Wallet className="h-4 w-4 text-cyan-300 group-hover:scale-110 transition-transform" />
+                      <span>Request Secure Payout (Modal)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/5 font-mono">
+                  <div>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Accumulated</p>
+                    <p className="font-bold text-sm text-slate-200">{aggregateTotalEarned.toFixed(4)} USDT</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Attention share</p>
+                    <p className="font-bold text-sm text-emerald-400 font-bold">80/20 Contract</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cumulative Earned Card (span 3) */}
+              <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">All-Time Revenue</span>
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-white tracking-tight">{aggregateTotalEarned.toFixed(4)}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Total revenue converted via verified video streams & tasks.</p>
+                </div>
+                
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+                  <CheckCircle className="h-3 w-3 shrink-0" />
+                  <span>Full Ledger Synced</span>
+                </div>
+              </div>
+
+              {/* House Platform Fee card (span 3) */}
+              <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Platform Commission</span>
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-cyan-400 tracking-tight">{aggregateCommissionPaid.toFixed(4)} <span className="text-xs text-slate-400 font-sans">USDT</span></p>
+                  <p className="text-[10px] text-slate-400 mt-1">20% fee reserved for routing protocols and cloud server databases.</p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
+                  <span>20% Model Verified</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 30-Day Earnings Trend Chart */}
+            <div className="bg-[#161B28] rounded-3xl p-6 border border-white/5 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <TrendingUp className="h-5 w-5 text-cyan-400" />
+                    <h3 className="font-display font-extrabold text-lg text-white">USDT Yield Trend</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Visualizing your authentic attention share performance across the past 30 days.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-4 bg-slate-900/40 p-1.5 rounded-lg border border-white/5 w-fit">
+                  <span className="text-[10px] text-cyan-400 font-mono font-bold px-2 py-0.5 bg-cyan-500/10 rounded">
+                    Cycle: 30D Trend
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono pr-2">
+                    Avg. Yield: {((currentProfile.total_earned || 0) / 30).toFixed(4)} USDT/day
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-[230px] w-full mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={getTrendData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#06B6D4" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="#64748B" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false}
+                      dy={10}
                     />
-                    <span className="absolute inset-y-0 right-3 flex items-center font-mono text-[10px] font-bold text-slate-400">
-                      USDT
-                    </span>
-                  </div>
-                </div>
-
-                {/* Fee breakdown calculator */}
-                <div className="rounded-xl bg-slate-950 p-3 border border-slate-900 space-y-1.5 font-mono text-[10px] text-slate-400">
-                  <div className="flex justify-between">
-                    <span>Requested Amount:</span>
-                    <span className="text-slate-200">{(parseFloat(withdrawAmount) || 0).toFixed(4)} USDT</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Block Gas Coverage Fee:</span>
-                    <span className="text-slate-200">0.0000 USDT (Zero)</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-900 pt-1.5 font-bold">
-                    <span>Final Amount Settled:</span>
-                    <span className="text-cyan-400">{(parseFloat(withdrawAmount) || 0).toFixed(4)} USDT</span>
-                  </div>
-                </div>
-
-                {/* Button */}
-                <button
-                  type="submit"
-                  disabled={withdrawalLoading || currentProfile.balance < 2}
-                  className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-500 py-3 text-xs font-bold text-white transition-all duration-300 hover:brightness-110 disabled:opacity-40"
-                >
-                  {withdrawalLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Broadcasting Signature...</span>
-                    </>
-                  ) : currentProfile.balance < 2 ? (
-                    <span>Requires min. 2.0000 USDT balance</span>
-                  ) : (
-                    <span>Execute Blockchain Withdrawal</span>
-                  )}
-                </button>
-              </form>
+                    <YAxis 
+                      stroke="#64748B" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false}
+                      dx={-5}
+                      tickFormatter={(v) => `${v.toFixed(2)}`}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#0F172A', 
+                        borderColor: 'rgba(255,255,255,0.08)', 
+                        borderRadius: '16px', 
+                        fontSize: '11px', 
+                        color: '#fff',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)' 
+                      }} 
+                      labelStyle={{ color: '#22D3EE', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#E2E8F0' }}
+                      formatter={(value: any) => [`${parseFloat(value).toFixed(4)} USDT`, 'Earnings']}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="amount" 
+                      stroke="#06B6D4" 
+                      strokeWidth={2.5} 
+                      dot={{ r: 3, fill: '#06B6D4', stroke: '#151b26', strokeWidth: 1.5 }} 
+                      activeDot={{ r: 5, fill: '#22D3EE', strokeWidth: 0 }} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             {/* AUDIT CODES / HISTORICAL LOG LIST */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/10 p-6 backdrop-blur-sm">
+            <div className="rounded-3xl border border-white/5 bg-[#161B28] p-6 shadow-xl">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <History className="h-5 w-5 text-slate-400" />
-                  <h3 className="font-display font-bold text-base text-white">Attention Ledger History</h3>
+                  <h3 className="font-display font-extrabold text-lg text-white">Attention Ledger History</h3>
                 </div>
                 <BookOpen className="h-4 w-4 text-slate-500" />
               </div>
@@ -639,13 +752,13 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                   No registered database entries yet. Completed videos or withdrawals output details here.
                 </div>
               ) : (
-                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1.5">
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
                   {transactions.map((tx) => (
-                    <div key={tx.id} className="p-3 rounded-xl bg-slate-950/60 border border-slate-900 space-y-1.5">
+                    <div key={tx.id} className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-900 space-y-1.5 hover:border-slate-800 transition-all">
                       <div className="flex items-start justify-between">
                         <div>
                           <span className="block text-[11px] font-semibold text-slate-200 line-clamp-1">{tx.description}</span>
-                          <span className="block text-[9px] font-mono text-slate-500">
+                          <span className="block text-[9px] font-mono text-slate-500 mt-0.5">
                             {new Date(tx.created_at).toLocaleString()}
                           </span>
                         </div>
@@ -656,19 +769,18 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                           }`}>
                             {tx.type === 'withdrawal' ? '-' : '+'}{tx.amount.toFixed(4)} USDT
                           </span>
-                          <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-widest leading-none">
+                          <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-widest leading-none mt-0.5">
                             {tx.type}
                           </span>
                         </div>
                       </div>
 
-                      {/* Render transaction hash split */}
                       {tx.tx_hash && (
                         <div className="flex items-center justify-between border-t border-slate-900/60 pt-1.5 text-[9px] font-mono">
-                          <span className="text-slate-500">Tx: {tx.tx_hash.substring(0, 8)}...{tx.tx_hash.substring(tx.tx_hash.length - 8)}</span>
+                          <span className="text-slate-500">Tx ID: {tx.tx_hash.substring(0, 10)}...{tx.tx_hash.substring(tx.tx_hash.length - 10)}</span>
                           <button
                             onClick={() => copyToClipboard(tx.tx_hash!, tx.id)}
-                            className="cursor-pointer text-[9px] text-cyan-500/80 hover:text-cyan-400 hover:underline flex items-center space-x-1"
+                            className="cursor-pointer text-[9px] text-cyan-500/85 hover:text-cyan-450 hover:underline flex items-center space-x-1"
                           >
                             <span>{copiedTxId === tx.id ? 'Copied' : 'Copy Hash'}</span>
                           </button>
@@ -679,12 +791,278 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 </div>
               )}
             </div>
-
           </div>
+        )}
 
+        {dashboardTab === 'offers' && (
+          <OffersView 
+            campaigns={campaigns}
+            isLoading={isLoading}
+            onWatchAd={handleWatchAd}
+          />
+        )}
+
+        {dashboardTab === 'tasks' && (
+          <TasksView 
+            tasks={tasks}
+            isLoading={isLoading}
+            onCompleteTask={handleCompleteTask}
+          />
+        )}
+
+        {dashboardTab === 'withdraw' && (
+          <WithdrawView 
+            currentProfile={currentProfile}
+            withdrawAddress={withdrawAddress}
+            setWithdrawAddress={setWithdrawAddress}
+            withdrawAmount={withdrawAmount}
+            setWithdrawAmount={setWithdrawAmount}
+            withdrawalLoading={withdrawalLoading}
+            withdrawalStatus={withdrawalStatus}
+            networkType={networkType}
+            setNetworkType={setNetworkType}
+            onWithdrawSubmit={handleWithdraw}
+          />
+        )}
+
+        {dashboardTab === 'settings' && (
+          <SettingsView 
+            currentProfile={currentProfile}
+            settingsWallet={settingsWallet}
+            setSettingsWallet={setSettingsWallet}
+            settingsStatus={settingsStatus}
+            settingsLoading={settingsLoading}
+            onUpdateWalletSubmit={handleUpdateWallet}
+            inviteLink={inviteLink}
+            copiedLink={copiedLink}
+            onCopyInvite={copyInviteLink}
+            isProd={isProd}
+            isSimulatingInvite={isSimulatingInvite}
+            onSimulateInvite={handleSimulateInvite}
+          />
+        )}
+      </main>
+
+
+
+      {/* ADVERTISING / ADD TASK CALL-TO-ACTION DIALOG POPUP */}
+      {isAddTaskModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-cyan-500/20 bg-[#0C1221] p-6 shadow-2xl">
+            <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-3xl pointer-events-none" />
+            
+            <div className="flex justify-between items-start mb-4">
+              <h4 className="font-display font-extrabold text-[#fff] text-lg uppercase tracking-wide">
+                🚀 Advertise In Extreme W2E
+              </h4>
+              <button 
+                onClick={() => setIsAddTaskModalOpen(false)}
+                className="p-1 rounded-lg border border-slate-800 text-slate-400 hover:text-white bg-slate-950/60 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-300 leading-relaxed mb-6 font-medium">
+              Do you want to add a task? Follow this link:{' '}
+              <span className="text-cyan-400 font-bold underline">usdt-addtask.xyz</span> to let people do your own tasks!
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a 
+                href="https://usdt-addtask.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsAddTaskModalOpen(false)}
+                className="flex-1 cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-500 to-electric-blue hover:brightness-110 shadow-lg shadow-cyan-500/10 py-3 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
+              >
+                <span>Navigate to usdt-addtask.xyz</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
+              <button 
+                onClick={() => setIsAddTaskModalOpen(false)}
+                className="cursor-pointer py-3 px-5 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-all font-sans"
+              >
+                Close Dialog
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-      </div>
+      {/* SECURE WITHDRAWAL REQUEST OVERLAY MODAL */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-cyan-500/30 bg-[#0C1221] p-6 shadow-2xl">
+            <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-3xl pointer-events-none" />
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h4 className="font-display font-extrabold text-white text-lg uppercase tracking-wide flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                  🔐 Secure USDT Payout
+                </h4>
+                <p className="text-slate-400 text-xs mt-0.5 font-mono">Verified Web3 Decentralized Settlement</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsWithdrawModalOpen(false);
+                  setWithdrawalStatus(null);
+                }}
+                className="p-1 rounded-lg border border-slate-800 text-slate-400 hover:text-white bg-slate-950/60 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Account Stats Frame */}
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 mb-5 flex justify-between items-center">
+              <div>
+                <span className="block text-[10px] text-slate-500 uppercase tracking-widest font-mono">Available Balance</span>
+                <span className="text-xl font-mono font-bold text-white">{currentProfile.balance.toFixed(4)} USDT</span>
+              </div>
+              <button 
+                onClick={() => setWithdrawAmount(currentProfile.balance.toString())}
+                className="cursor-pointer px-2.5 py-1 text-[10px] uppercase font-mono font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 rounded-md transition-all active:scale-95"
+              >
+                Max Amount
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleWithdraw} className="space-y-4">
+              {/* Wallet Address Input */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider font-sans">Destination Chain Wallet Address</label>
+                  {currentProfile.wallet_address && (
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawAddress(currentProfile.wallet_address || '')}
+                      className="cursor-pointer text-[10px] text-cyan-400 font-mono hover:underline"
+                    >
+                      Use Saved
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={withdrawAddress}
+                    onChange={(e) => setWithdrawAddress(e.target.value)}
+                    placeholder="Enter TRC-20 (T...) or ERC-20 (0x...) wallet"
+                    className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500/35 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-650 focus:outline-none transition-all font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Amount Input */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider font-sans">Withdrawal Amount (USDT)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    min="2"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    placeholder="Minimum 2.0000"
+                    className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500/35 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-655 focus:outline-none transition-all font-mono"
+                  />
+                  <div className="absolute right-3 top-3 text-[10px] font-mono font-medium text-slate-550">USDT</div>
+                </div>
+              </div>
+
+              {/* Network Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider font-sans">Select Routing Chain Protocol</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'trc20', label: 'TRON / TRC20', speed: 'Ultra Fast', fee: '~0.00 Fee' },
+                    { id: 'bep20', label: 'BSC / BEP20', speed: 'Fast Cycle', fee: 'No Gas Fee' },
+                    { id: 'erc20', label: 'ETH / ERC20', speed: 'Moderate', fee: 'Platform pays' },
+                  ].map((net) => {
+                    const isSelected = networkType === net.id;
+                    return (
+                      <button
+                        key={net.id}
+                        type="button"
+                        onClick={() => setNetworkType(net.id as any)}
+                        className={`cursor-pointer p-2.5 rounded-xl border text-left transition-all ${
+                          isSelected 
+                            ? 'bg-cyan-500/10 border-cyan-500/40 text-white shadow-md font-bold' 
+                            : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <span className="block text-[11px] font-bold font-sans">{net.label}</span>
+                        <span className="block text-[8px] font-mono text-slate-500 mt-1">{net.speed}</span>
+                        <span className="block text-[8px] font-mono text-cyan-400/80 font-semibold">{net.fee}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Warnings / Model Rules description info board */}
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-900 space-y-1">
+                <div className="flex gap-1.5 text-[10px] text-slate-400 font-sans">
+                  <CheckCircle className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong>80% Yield Rule:</strong> You retain 80% with zero hidden operational gas charges.</span>
+                </div>
+                <div className="flex gap-1.5 text-[10px] text-slate-400 font-sans">
+                  <CheckCircle className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong>Secure Encryption:</strong> Split-ledger ledger synchronization preserves account state.</span>
+                </div>
+              </div>
+
+              {/* Status notifications */}
+              {withdrawalStatus && (
+                <div className={`p-4 rounded-xl text-xs font-mono border ${
+                  withdrawalStatus.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' 
+                    : 'bg-red-500/10 border-red-500/25 text-red-400'
+                }`}>
+                  <div className="flex space-x-2">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{withdrawalStatus.text}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={withdrawalLoading}
+                  className="flex-1 cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:brightness-110 disabled:opacity-50 shadow-md shadow-emerald-500/15 py-3 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
+                >
+                  {withdrawalLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Broadcasting Ledger...</span>
+                    </>
+                  ) : (
+                    <span>Broadcast Payout</span>
+                  )}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsWithdrawModalOpen(false);
+                    setWithdrawalStatus(null);
+                  }}
+                  className="cursor-pointer py-3 px-5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-xs font-bold uppercase tracking-wider transition-all font-sans"
+                >
+                  Close
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ==========================================
           VIDEO PLAYER SIMULATOR OVERLAY MODAL
@@ -719,7 +1097,6 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             <div className="relative aspect-video bg-black flex items-center justify-center">
               {watchStep === 'playing' ? (
                 <>
-                  {/* Virtual visual elements imitating static ad streaming */}
                   <img 
                     src={activeAd.thumbnail} 
                     alt="Active Playing ad" 
@@ -727,7 +1104,6 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                     className="absolute inset-0 h-full w-full object-cover opacity-30 blur-sm pointer-events-none" 
                   />
                   
-                  {/* Digital glowing elements tracking attention values */}
                   <div className="relative text-center p-6 space-y-6 z-10">
                     <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
                       <span className="absolute inset-0 h-full w-full rounded-full border-2 border-cyan-400/30 border-t-cyan-400 animate-spin" />
@@ -744,17 +1120,15 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                     </div>
 
                     <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-normal">
-                      Do not refresh or swap the active tab. System attention check algorithms must sign the packet at zero validation.
+                      Do not refresh or swap the active tab. System attention check algorithms must sign at zero validation.
                     </p>
                   </div>
 
-                  {/* Progressive indicator bar */}
                   <div className="absolute bottom-0 left-0 h-1 bg-cyan-400 transition-all duration-1000 ease-linear" 
                        style={{ width: `${((activeAd.duration - countdown) / activeAd.duration) * 100}%` }} 
                   />
                 </>
               ) : (
-                /* Reward successfully claimed view */
                 <div className="relative text-center p-8 space-y-4 z-10">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                     <CheckCircle className="h-7 w-7" />
@@ -767,7 +1141,6 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                     </p>
                   </div>
 
-                  {/* Revenue division detailed breakdown display */}
                   <div className="mx-auto max-w-md rounded-xl bg-slate-950 p-4 border border-slate-850 text-left font-mono text-[11px] space-y-2">
                     <div className="text-slate-400 font-bold border-b border-slate-900 pb-1.5 uppercase tracking-wide">
                       ESTABLISHED 820 SPLIT LEDGER

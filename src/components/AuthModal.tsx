@@ -52,25 +52,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       if (activeTab === 'signup') {
-        // Use custom wrapper passing full_name into user metadata context
-        const response = await api.auth.signUp(email, password, fullName);
+        const response: any = await api.auth.signUp(email, password, fullName);
+
+        // Try to perform a fast under-the-hood auto-login in production if the session wasn't already returned by default
+        let finalSession: any = response;
+        if (isProd && !finalSession?.profile) {
+          try {
+            const autoLogin: any = await api.auth.signIn(email, password);
+            if (autoLogin?.profile) {
+              finalSession = autoLogin;
+            }
+          } catch (autoLoginError) {
+            console.log('Immediate automatic login skipped or waiting confirmation:', autoLoginError);
+          }
+        }
+
+        const hasSession = !!finalSession?.profile;
+
         setSuccessMsg(
           isProd
-            ? 'Account registered successfully! A signup validation request has been sent to your email.'
+            ? (hasSession
+                ? 'Account registered and authorized successfully! Redirecting you to the app...'
+                : 'Account registered successfully! Please click below to check your dashboard or confirm via confirmation request.')
             : 'Simulated Sandbox registration completed! Welcome aboard.'
         );
 
-        // Auto transition mock logins or trigger success callback
-        if (!isProd) {
+        // If authorized (or emulator mode), navigate directly to dashboard
+        if (!isProd || hasSession) {
           setTimeout(() => {
-            onSuccess(response);
-          }, 1500);
+            onSuccess(finalSession);
+          }, 1200);
         } else {
-          // Live Supabase signup completed, swap to login tab
+          // If live Supabase requires confirmation or session could not be established immediately,
+          // swap to login and let them access or bypass easily.
           setTimeout(() => {
+            // Also suggest bypassing if needed by providing a notice or letting them access
             setSuccessMsg(null);
             setActiveTab('login');
-          }, 3500);
+          }, 4500);
         }
       } else {
         // SignIn Operation

@@ -82,7 +82,7 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({ isOpen, onCl
             </li>
             <li>
               Go to project <strong className="text-white">Settings &gt; API</strong>, locate your credentials, and declare them as environment variables inside your workspace secret panel:
-              <div className="mt-2 rounded-xl bg-slate-950 p-2.5 border border-slate-9ml font-mono text-[10px] space-y-1.5 text-slate-300">
+              <div className="mt-2 rounded-xl bg-slate-950 p-2.5 border border-slate-900 font-mono text-[10px] space-y-1.5 text-slate-300">
                 <p>VITE_SUPABASE_URL="your-project-endpoint..."</p>
                 <p>VITE_SUPABASE_ANON_KEY="your-anon-api-key..."</p>
               </div>

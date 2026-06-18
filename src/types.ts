@@ -7,6 +7,10 @@ export interface UserProfile {
   total_platform_commission: number; // Platform cumulative earnings (20%)
   wallet_address?: string; // Optinal Web3 wallet address
   created_at: string;
+  referred_by?: string; // User ID of the inviter
+  referral_code?: string; // Unique referral code of this user
+  referral_earnings?: number; // Cumulative passive earnings from invitees (5% bonus)
+  referral_count?: number; // Total number of successfully referred users
 }
 
 export interface AdCampaign {
