@@ -377,18 +377,20 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     }
 
     try {
-      // Execute database withdrawal
+      // Execute database withdrawal passing the selected network token channel
       const updatedProfile = await api.profiles.withdraw(
         currentProfile.id,
         amount,
-        withdrawAddress
+        withdrawAddress,
+        networkType.toUpperCase()
       );
 
       onProfileChange(updatedProfile);
       setWithdrawAmount('');
+      
       setWithdrawalStatus({
         type: 'success',
-        text: `Transaction broadcast successfully! ${amount.toFixed(4)} USDT transferred to ${withdrawAddress.substring(0, 6)}...${withdrawAddress.substring(withdrawAddress.length - 4)} with instant blockchain approval.`
+        text: `Payout requested! Your withdrawal of ${amount.toFixed(4)} USDT is pending admin review and will be processed within 24 hours to address ${withdrawAddress.substring(0, 6)}...${withdrawAddress.substring(withdrawAddress.length - 4)} (${networkType.toUpperCase()}).`
       });
 
       // Synchronize datasets

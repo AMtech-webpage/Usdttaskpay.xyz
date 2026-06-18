@@ -995,55 +995,31 @@ export const api = {
     },
 
     // Initiate user withdrawal
-    async withdraw(userId: string, amount: number, walletAddress: string): Promise<UserProfile> {
+    async withdraw(userId: string, amount: number, walletAddress: string, network: string = 'TRC20'): Promise<UserProfile> {
       if (isSupabaseConfigured() && supabase) {
-        // 1. Fetch current profile to check balance
+        // Call the transactional RPC function on Supabase to safely process without race conditions
+        const { error } = await supabase.rpc('submit_manual_withdrawal', {
+          user_id: userId,
+          withdrawal_amount: amount,
+          user_network: network,
+          user_wallet: walletAddress
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Manual payout registration rejected by transaction gate.');
+        }
+
+        // Fetch current updated profile to synchronize frontend context
         const { data: current, error: getErr } = await supabase
           .from('profiles')
-          .select('balance, email, full_name')
+          .select('*')
           .eq('id', userId)
           .maybeSingle();
+
         if (getErr) throw getErr;
-        if (!current) throw new Error('UserProfile not found for withdrawal processing.');
+        if (!current) throw new Error('UserProfile not found after processing.');
 
-        if ((current.balance || 0) < amount) {
-          throw new Error('Insufficient balance to withdraw.');
-        }
-
-        const newBalance = (current.balance || 0) - amount;
-
-        const columns = await getAvailableProfileColumns();
-        const updatePayload: any = {
-          balance: parseFloat(newBalance.toFixed(6))
-        };
-        if (columns.includes('wallet_address')) {
-          updatePayload.wallet_address = walletAddress;
-        }
-
-        // 2. Perform update
-        const { data, error } = await supabase
-          .from('profiles')
-          .update(updatePayload)
-          .eq('id', userId)
-          .select()
-          .maybeSingle();
-
-        if (error) throw error;
-        if (!data) throw new Error('UserProfile not found during withdrawal balance update.');
-
-        // 3. Create a pending/completed withdrawal transaction log
-        await supabase
-          .from('transactions')
-          .insert({
-            user_id: userId,
-            type: 'withdrawal',
-            amount: amount,
-            status: 'completed',
-            description: `USDT Withdrawal to: ${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}`,
-            tx_hash: `0x${Array.from({length: 64}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`
-          });
-
-        return data as UserProfile;
+        return current as UserProfile;
       } else {
         const profileKey = `w2e_profile_${userId}`;
         const profile = getLocalData<UserProfile>(profileKey, {
@@ -1072,8 +1048,8 @@ export const api = {
           user_id: userId,
           type: 'withdrawal',
           amount: amount,
-          status: 'completed',
-          tx_hash: `0x${Array.from({length: 64}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`,
+          status: 'pending',
+          tx_hash: `pending-tx-${Array.from({length: 32}, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('')}`,
           created_at: new Date().toISOString(),
           description: `USDT Withdrawal to: ${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}`
         };

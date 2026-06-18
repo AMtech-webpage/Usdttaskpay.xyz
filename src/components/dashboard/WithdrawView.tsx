@@ -1,5 +1,5 @@
-import React from 'react';
-import { UserProfile } from '../../lib/supabase';
+import React, { useState, useEffect } from 'react';
+import { UserProfile, supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { Wallet, Info, Loader2, CheckCircle2, X } from 'lucide-react';
 
 interface WithdrawViewProps {
@@ -29,6 +29,85 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
   onWithdrawSubmit,
   onClearStatus,
 }) => {
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchWithdrawalHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      if (isSupabaseConfigured() && supabase) {
+        const { data, error } = await supabase
+          .from('withdrawal_requests')
+          .select('*')
+          .eq('user_id', currentProfile.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.warn('[Withdrawal History Query Blocked] Falling back to transactions:', error);
+          loadFallbackHistory();
+        } else if (data) {
+          setHistory(data);
+        }
+      } else {
+        loadFallbackHistory();
+      }
+    } catch (err) {
+      console.error('Error fetching withdrawal requests:', err);
+      loadFallbackHistory();
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const loadFallbackHistory = () => {
+    const txKey = `w2e_transactions_${currentProfile.id}`;
+    const localTx = localStorage.getItem(txKey);
+    const mockList = localTx ? JSON.parse(localTx) : [];
+    
+    const withdrawals = mockList
+      .filter((t: any) => t.type === 'withdrawal')
+      .map((t: any) => ({
+        id: t.id,
+        created_at: t.created_at,
+        amount: t.amount,
+        network: t.network || networkType.toUpperCase(),
+        wallet_address: t.wallet_address || currentProfile.wallet_address || '0xSimulatedWalletAddress',
+        status: t.amount > 5.0 ? 'manual_review' : 'completed',
+        processing_type: t.amount > 5.0 ? 'manual_review' : 'automatic'
+      }));
+    setHistory(withdrawals);
+  };
+
+  useEffect(() => {
+    fetchWithdrawalHistory();
+  }, [currentProfile.id, withdrawalStatus]);
+
+  const getStatusBadge = (status: string) => {
+    const s = (status || '').toLowerCase();
+    if (s === 'pending' || s === 'manual_review') {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold uppercase tracking-wider animate-pulse font-mono">
+          <span className="h-1.5 w-1.5 rounded-full bg-yellow-400 animate-ping" />
+          <span>Pending</span>
+        </span>
+      );
+    }
+    if (s === 'approved' || s === 'completed') {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-bold uppercase tracking-wider font-mono">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+          <span>Approved</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded bg-red-400/10 border border-red-500/30 text-red-400 text-[10px] font-bold uppercase tracking-wider font-mono">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+        <span>Rejected</span>
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-xl mx-auto">
       <div className="rounded-2xl border border-glow bg-slate-950/40 p-6 backdrop-blur-sm shadow-xl">
@@ -210,6 +289,67 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
             </button>
           )}
         </form>
+      </div>
+
+      {/* Recent Withdrawal Requests History Section */}
+      <div className="rounded-2xl border border-slate-900 bg-slate-950/40 p-5 shadow-2xl backdrop-blur-sm">
+        <div className="mb-4 flex items-center justify-between border-b border-slate-900/40 pb-3">
+          <h4 className="font-display font-extrabold text-sm text-white flex items-center space-x-2">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span>Recent Withdrawal Requests</span>
+          </h4>
+          <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-cyan-400 uppercase">
+            Ledger History
+          </span>
+        </div>
+
+        {historyLoading ? (
+          <div className="py-8 flex flex-col justify-center items-center space-y-2 text-slate-500 text-xs font-mono">
+            <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+            <span>Syncing blockchain queue...</span>
+          </div>
+        ) : history.length === 0 ? (
+          <div className="text-center py-10 rounded-xl border border-dashed border-slate-900/60 bg-slate-950/20">
+            <p className="text-xs text-slate-500 font-mono">No payout history found. Complete tasks to start earning!</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-[11px] text-slate-300 font-mono">
+              <thead>
+                <tr className="border-b border-slate-900 text-slate-500 text-left">
+                  <th className="pb-2 font-bold uppercase tracking-wider">Date</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider">Amount</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider">Network</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider">Address</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-900/40">
+                {history.map((req) => (
+                  <tr key={req.id} className="hover:bg-slate-900/20 transition-colors">
+                    <td className="py-3 text-slate-400 text-[10px]">
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 text-white font-bold">
+                      {parseFloat(req.amount).toFixed(4)} USDT
+                    </td>
+                    <td className="py-3 text-slate-400">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[9px] font-bold text-slate-400 uppercase">
+                        {req.network}
+                      </span>
+                    </td>
+                    <td className="py-3 text-slate-400 font-mono text-[10px] select-all max-w-[100px] truncate" title={req.wallet_address}>
+                      {req.wallet_address ? `${req.wallet_address.substring(0, 5)}...${req.wallet_address.substring(req.wallet_address.length - 4)}` : 'N/A'}
+                    </td>
+                    <td className="py-3 text-right">
+                      {getStatusBadge(req.status)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
