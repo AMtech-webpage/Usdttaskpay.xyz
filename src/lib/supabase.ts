@@ -23,6 +23,61 @@ export const supabase = isSupabaseConfigured()
   : null;
 
 // ==========================================
+// DYNAMIC SCHEMA AUTO-ADAPTATION ENGINE
+// ==========================================
+// Handles environments where newer columns (e.g. referred_by, referral_code) are missing.
+// If an operation fails with a Postgres 42703 (undefined_column) error, we dynamically blacklist it and retry!
+const OPTIONAL_COLUMNS = [
+  'referred_by',
+  'referral_code',
+  'referral_earnings',
+  'referral_count',
+  'total_platform_commission',
+  'wallet_address'
+];
+
+const detectedMissingColumns = new Set<string>();
+
+export function filterSelectFields(allWanted: string[]): string {
+  return allWanted.filter(col => !detectedMissingColumns.has(col)).join(', ');
+}
+
+export function cleanPayload(payload: Record<string, any>): Record<string, any> {
+  const result = { ...payload };
+  detectedMissingColumns.forEach(col => {
+    delete result[col];
+  });
+  return result;
+}
+
+export function handleDatabaseError(error: any): boolean {
+  if (!error) return false;
+  const errMsg = error.message || '';
+  const errCode = error.code || '';
+  if (errCode === '42703' || errMsg.includes('does not exist') || errMsg.includes('column')) {
+    let newlyDetected = false;
+    for (const col of OPTIONAL_COLUMNS) {
+      if (!detectedMissingColumns.has(col) && errMsg.includes(col)) {
+        console.warn(`[Supabase Schema Auto-Adapt] Detected missing column: "${col}". Adding to blacklist and adapt.`);
+        detectedMissingColumns.add(col);
+        newlyDetected = true;
+      }
+    }
+    if (!newlyDetected) {
+      const match = errMsg.match(/column\s+["']?([a-zA-Z0-9_]+)["']?/i);
+      const colName = match ? match[1] : null;
+      if (colName && OPTIONAL_COLUMNS.includes(colName) && !detectedMissingColumns.has(colName)) {
+        console.warn(`[Supabase Schema Auto-Adapt] Regexp-matched missing column: "${colName}". Adding to blacklist.`);
+        detectedMissingColumns.add(colName);
+        newlyDetected = true;
+      }
+    }
+    return newlyDetected;
+  }
+  return false;
+}
+
+// ==========================================
 // MOCK STATE SEEDING (FOR SANDBOX OFFLINE MODE)
 // ==========================================
 const DEFAULT_CAMPAIGNS: AdCampaign[] = [
@@ -137,6 +192,71 @@ const setLocalData = <T>(key: string, data: T): void => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+// Dynamic column detector to handle variations in Supabase database schemas gracefully
+let detectedColumns: string[] | null = null;
+async function getAvailableProfileColumns(): Promise<string[]> {
+  if (detectedColumns) return detectedColumns;
+  
+  const defaultFields = ['id', 'email', 'full_name', 'balance', 'total_earned', 'created_at'];
+  if (!supabase) {
+    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count'];
+    return detectedColumns;
+  }
+  
+  try {
+    // Check available columns by inspecting the profiles table structure on a quick select
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .limit(1);
+    
+    if (!error && data && data.length > 0) {
+      detectedColumns = Object.keys(data[0]);
+      console.log('Detected profiles columns from database:', detectedColumns);
+      return detectedColumns;
+    }
+  } catch (err) {
+    console.warn('Failed to detect columns via select *:', err);
+  }
+  
+  // Proactively test presence of optional/referral related columns
+  const finalFields = [...defaultFields];
+  const testFields = ['total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count'];
+  
+  for (const field of testFields) {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .select(field)
+        .limit(1);
+        
+      if (!error) {
+        finalFields.push(field);
+      } else {
+        const isColumnMissing = error.code === '42703' || error.message?.includes('does not exist');
+        if (!isColumnMissing) {
+          finalFields.push(field);
+        }
+      }
+    } catch {
+      // Omit if fails completely
+    }
+  }
+  
+  detectedColumns = finalFields;
+  console.log('Dynamic schema profiles columns cached:', detectedColumns);
+  return detectedColumns;
+}
+
+export function blacklistProfileColumn(colName: string): void {
+  if (detectedColumns) {
+    detectedColumns = detectedColumns.filter(c => c !== colName);
+  } else {
+    detectedColumns = ['id', 'email', 'full_name', 'balance', 'total_earned', 'created_at'];
+  }
+  console.log(`[Supabase Auto-Adapt] Column "${colName}" blacklisted. Remaining columns:`, detectedColumns);
+}
+
 async function ensureProfileExists(
   userId: string,
   userEmail: string,
@@ -146,6 +266,8 @@ async function ensureProfileExists(
   if (!supabase) {
     throw new Error('Supabase client is not initialized');
   }
+
+  const columns = await getAvailableProfileColumns();
 
   // 1. Fetch current profile gracefully using maybeSingle
   const { data: dbProfile, error: profileError } = await supabase
@@ -160,8 +282,8 @@ async function ensureProfileExists(
   }
 
   if (dbProfile) {
-    // If profile exists but is missing its own referral_code, update it
-    if (!dbProfile.referral_code) {
+    // If profile exists but is missing its own referral_code, update it (if referral system is present in DB)
+    if (columns.includes('referral_code') && !dbProfile.referral_code) {
       const simpleNameSlug = (dbProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
       const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
       
@@ -184,9 +306,9 @@ async function ensureProfileExists(
   const simpleNameSlug = userEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
   const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
 
-  // Find inviter user-id if referred_by_code is supplied
+  // Find inviter user-id if referred_by_code is supplied & supported by DB
   let resolvedReferredBy: string | null = null;
-  if (referredByCode) {
+  if (referredByCode && columns.includes('referral_code') && columns.includes('referred_by')) {
     const { data: referrer, error: refError } = await supabase
       .from('profiles')
       .select('id')
@@ -206,12 +328,21 @@ async function ensureProfileExists(
     total_earned: 0.0000,
     total_platform_commission: 0.0000,
     wallet_address: '',
-    created_at: new Date().toISOString(),
-    referred_by: resolvedReferredBy,
-    referral_code: autoReferralCode,
-    referral_earnings: 0.0000,
-    referral_count: 0
+    created_at: new Date().toISOString()
   };
+
+  if (columns.includes('referred_by')) {
+    newProfile.referred_by = resolvedReferredBy;
+  }
+  if (columns.includes('referral_code')) {
+    newProfile.referral_code = autoReferralCode;
+  }
+  if (columns.includes('referral_earnings')) {
+    newProfile.referral_earnings = 0.0000;
+  }
+  if (columns.includes('referral_count')) {
+    newProfile.referral_count = 0;
+  }
 
   const { data: insertedProfile, error: insertError } = await supabase
     .from('profiles')
@@ -225,7 +356,7 @@ async function ensureProfileExists(
   }
 
   // Successfully inserted! Bump referred_count of inviter if applicable
-  if (resolvedReferredBy) {
+  if (resolvedReferredBy && columns.includes('referral_count')) {
     try {
       const { data: rProfile, error: rError } = await supabase
         .from('profiles')
@@ -653,89 +784,141 @@ export const api = {
     // Earn rewards on frontend, update in public.profiles table
     async addRewards(userId: string, rewardAmount: number, platformCommission: number, description: string, referenceId: string): Promise<UserProfile> {
       if (isSupabaseConfigured() && supabase) {
-        // 1. Fetch current profile
-        const { data: current, error: getErr } = await supabase
-          .from('profiles')
-          .select('balance, total_earned, total_platform_commission, referred_by, full_name')
-          .eq('id', userId)
-          .maybeSingle();
-        if (getErr) throw getErr;
-        if (!current) throw new Error('UserProfile not found during reward fetching');
+        let columns = await getAvailableProfileColumns();
 
-        const newBalance = (current.balance || 0) + rewardAmount;
-        const newTotalEarned = (current.total_earned || 0) + rewardAmount;
-        const newPlatformCommission = (current.total_platform_commission || 0) + platformCommission;
-
-        // 2. Perform transaction database write (safe multi-step logic)
-        const { data, error } = await supabase
-          .from('profiles')
-          .update({
-            balance: parseFloat(newBalance.toFixed(6)),
-            total_earned: parseFloat(newTotalEarned.toFixed(6)),
-            total_platform_commission: parseFloat(newPlatformCommission.toFixed(6))
-          })
-          .eq('id', userId)
-          .select()
-          .maybeSingle();
-
-        if (error) throw error;
-        if (!data) throw new Error('UserProfile not found during rewards update');
-
-        // 3. Create a transaction audit log in Supabase
-        await supabase
-          .from('transactions')
-          .insert({
-            user_id: userId,
-            type: description.includes('Ad') ? 'watch_ad' : 'microtask',
-            amount: rewardAmount,
-            platform_share: platformCommission,
-            status: 'completed',
-            description,
-            tx_hash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
-          });
-
-        // 4. Dispatch 5% passive referral reward bonus to inviter if referred_by is set
-        if (current.referred_by) {
-          try {
-            const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
-            const { data: referrer, error: refErr } = await supabase
-              .from('profiles')
-              .select('balance, total_earned, referral_earnings')
-              .eq('id', current.referred_by)
-              .maybeSingle();
-
-            if (!refErr && referrer) {
-              const updatedRefBalance = (referrer.balance || 0) + referralBonus;
-              const updatedRefTotal = (referrer.total_earned || 0) + referralBonus;
-              const updatedRefEarnings = (referrer.referral_earnings || 0) + referralBonus;
-
-              await supabase
-                .from('profiles')
-                .update({
-                  balance: parseFloat(updatedRefBalance.toFixed(6)),
-                  total_earned: parseFloat(updatedRefTotal.toFixed(6)),
-                  referral_earnings: parseFloat(updatedRefEarnings.toFixed(6))
-                })
-                .eq('id', current.referred_by);
-
-              // Register transaction log for inviter's referral payout split
-              await supabase
-                .from('transactions')
-                .insert({
-                  user_id: current.referred_by,
-                  type: 'microtask',
-                  amount: referralBonus,
-                  status: 'completed',
-                  description: `5% Invite Yield from ${current.full_name || 'Invitee'} ad-stream`,
-                  tx_hash: `0x${Math.random().toString(36).substring(2, 15)}`
-                });
-            }
-          } catch (e) {
-            console.warn('Real Supabase Referral system split failure: ', e);
+        const runTransaction = async (): Promise<UserProfile> => {
+          // 1. Fetch current profile
+          const colsToSelect = ['balance', 'total_earned', 'full_name'];
+          if (columns.includes('total_platform_commission')) {
+            colsToSelect.push('total_platform_commission');
           }
-        }
+          if (columns.includes('referred_by')) {
+            colsToSelect.push('referred_by');
+          }
 
-        return data as UserProfile;
+          const { data: current, error: getErr } = await supabase
+            .from('profiles')
+            .select(colsToSelect.join(', '))
+            .eq('id', userId)
+            .maybeSingle();
+            
+          if (getErr) throw getErr;
+          if (!current) throw new Error('UserProfile not found during reward fetching');
+
+          const currentAny = current as any;
+          const newBalance = (currentAny.balance || 0) + rewardAmount;
+          const newTotalEarned = (currentAny.total_earned || 0) + rewardAmount;
+          const newPlatformCommission = (currentAny.total_platform_commission || 0) + platformCommission;
+
+          // 2. Perform transaction database write (safe multi-step logic)
+          const updatePayload: any = {
+            balance: parseFloat(newBalance.toFixed(6)),
+            total_earned: parseFloat(newTotalEarned.toFixed(6))
+          };
+          if (columns.includes('total_platform_commission')) {
+            updatePayload.total_platform_commission = parseFloat(newPlatformCommission.toFixed(6));
+          }
+
+          const { data, error } = await supabase
+            .from('profiles')
+            .update(updatePayload)
+            .eq('id', userId)
+            .select()
+            .maybeSingle();
+
+          if (error) throw error;
+          if (!data) throw new Error('UserProfile not found during rewards update');
+
+          // 3. Create a transaction audit log in Supabase
+          await supabase
+            .from('transactions')
+            .insert({
+              user_id: userId,
+              type: description.includes('Ad') ? 'watch_ad' : 'microtask',
+              amount: rewardAmount,
+              platform_share: platformCommission,
+              status: 'completed',
+              description,
+              tx_hash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
+            });
+
+          // 4. Dispatch 5% passive referral reward bonus to inviter if referred_by is set and supported
+          if (columns.includes('referred_by') && currentAny.referred_by) {
+            try {
+              const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
+              const refColsToSelect = ['balance', 'total_earned'];
+              if (columns.includes('referral_earnings')) {
+                refColsToSelect.push('referral_earnings');
+              }
+              
+              const { data: referrer, error: refErr } = await supabase
+                .from('profiles')
+                .select(refColsToSelect.join(', '))
+                .eq('id', currentAny.referred_by)
+                .maybeSingle();
+
+              if (!refErr && referrer) {
+                const referrerAny = referrer as any;
+                const updatedRefBalance = (referrerAny.balance || 0) + referralBonus;
+                const updatedRefTotal = (referrerAny.total_earned || 0) + referralBonus;
+                const updatedRefEarnings = (referrerAny.referral_earnings || 0) + referralBonus;
+
+                const refUpdatePayload: any = {
+                  balance: parseFloat(updatedRefBalance.toFixed(6)),
+                  total_earned: parseFloat(updatedRefTotal.toFixed(6))
+                };
+                if (columns.includes('referral_earnings')) {
+                  refUpdatePayload.referral_earnings = parseFloat(updatedRefEarnings.toFixed(6));
+                }
+
+                await supabase
+                  .from('profiles')
+                  .update(refUpdatePayload)
+                  .eq('id', currentAny.referred_by);
+
+                // Register transaction log for inviter's referral payout split
+                await supabase
+                  .from('transactions')
+                  .insert({
+                    user_id: currentAny.referred_by,
+                    type: 'microtask',
+                    amount: referralBonus,
+                    status: 'completed',
+                    description: `5% Invite Yield from ${currentAny.full_name || 'Invitee'} ad-stream`,
+                    tx_hash: `0x${Math.random().toString(36).substring(2, 15)}`
+                  });
+              }
+            } catch (e) {
+              console.warn('Real Supabase Referral system split failure: ', e);
+            }
+          }
+
+          return data as UserProfile;
+        };
+
+        try {
+          return await runTransaction();
+        } catch (txnError: any) {
+          console.error('[Supabase Self-Healing Txn Error]', txnError);
+          const errorMsg = txnError.message || '';
+          if (txnError.code === '42703' || errorMsg.includes('does not exist') || errorMsg.includes('column')) {
+            let matchedCol = '';
+            const testCols = ['referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'total_platform_commission', 'wallet_address'];
+            for (const col of testCols) {
+              if (errorMsg.includes(col)) {
+                matchedCol = col;
+                break;
+              }
+            }
+            if (matchedCol) {
+              blacklistProfileColumn(matchedCol);
+              columns = await getAvailableProfileColumns();
+              console.log(`[Supabase Self-Healing] Retrying addRewards after blacklisting column: "${matchedCol}"...`);
+              return await runTransaction();
+            }
+          }
+          throw txnError;
+        }
       } else {
         // Simulated local reward update
         const profileKey = `w2e_profile_${userId}`;
@@ -829,13 +1012,18 @@ export const api = {
 
         const newBalance = (current.balance || 0) - amount;
 
+        const columns = await getAvailableProfileColumns();
+        const updatePayload: any = {
+          balance: parseFloat(newBalance.toFixed(6))
+        };
+        if (columns.includes('wallet_address')) {
+          updatePayload.wallet_address = walletAddress;
+        }
+
         // 2. Perform update
         const { data, error } = await supabase
           .from('profiles')
-          .update({
-            balance: parseFloat(newBalance.toFixed(6)),
-            wallet_address: walletAddress
-          })
+          .update(updatePayload)
           .eq('id', userId)
           .select()
           .maybeSingle();

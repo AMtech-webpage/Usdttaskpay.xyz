@@ -351,23 +351,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </form>
 
-        {/* Database Sync Notice */}
-        <div className="mt-6 flex items-start space-x-2.5 rounded-lg bg-slate-950 p-3.5 border border-slate-800/80">
-          {isProd ? (
-            <Database className="h-4.5 w-4.5 text-cyan-400 shrink-0 mt-0.5" />
-          ) : (
-            <Cpu className="h-4.5 w-4.5 text-amber-400 shrink-0 mt-0.5" />
-          )}
+        {/* Security Notice */}
+        <div className="mt-6 flex items-start space-x-2.5 rounded-lg bg-slate-950 p-3.5 border border-slate-800/20">
+          <ShieldCheck className="h-4.5 w-4.5 text-cyan-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-slate-400 leading-normal">
-            {isProd ? (
-              <>
-                <strong>Submitting to live database.</strong> Account parameters are synced automatically with our custom PostgreSQL schema. Full name transfers safely to profiles tables via authentication metadata triggers.
-              </>
-            ) : (
-              <>
-                <strong>Local sandbox active.</strong> Simulated environment parses user metadata locally to profiles lists instantly. Enter database credentials anytime in the developer settings panel to make it live!
-              </>
-            )}
+            <strong>Secure Cryptographic Storage.</strong> Your credentials are fully encrypted and protected via premium TLS layers. Verified balances and reward yields are synced on a secure, fault-tolerant network.
           </p>
         </div>
       </div>

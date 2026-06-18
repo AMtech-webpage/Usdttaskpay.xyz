@@ -52,13 +52,15 @@ interface EarningsDashboardProps {
   onProfileChange: (updated: UserProfile) => void;
   onLogout: () => void;
   onOpenDeveloperPane: () => void;
+  onNavigateToLegal?: (page: 'terms' | 'privacy') => void;
 }
 
 export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   currentProfile,
   onProfileChange,
   onLogout,
-  onOpenDeveloperPane
+  onOpenDeveloperPane,
+  onNavigateToLegal
 }) => {
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [tasks, setTasks] = useState<MicroTask[]>([]);
@@ -557,6 +559,31 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             <nav className="flex-grow space-y-2">
               {renderNavLinks(true)}
               {renderAddTaskCTA(true)}
+              
+              {/* Mobile Legal Submenu links */}
+              <div className="border-t border-[#131924] pt-4 mt-4 space-y-1.5">
+                <span className="block font-mono text-[9px] uppercase tracking-wider text-slate-500 font-bold px-3">
+                  Legal Guidelines
+                </span>
+                <span 
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigateToLegal?.('terms');
+                  }}
+                  className="block w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-cyan-400 hover:bg-slate-900/60 cursor-pointer transition-colors"
+                >
+                  Terms & Conditions
+                </span>
+                <span 
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onNavigateToLegal?.('privacy');
+                  }}
+                  className="block w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-cyan-400 hover:bg-slate-900/60 cursor-pointer transition-colors"
+                >
+                  Privacy Policy
+                </span>
+              </div>
             </nav>
 
             <div className="border-t border-slate-900 pt-4 font-mono text-[9px] text-slate-550">
@@ -580,16 +607,6 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 <p className="text-sm text-slate-400">
                   Welcome back, <span className="text-cyan-400 font-semibold">{currentProfile.full_name}</span>. Trace your attention revenue split from this control panel.
                 </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={onOpenDeveloperPane}
-                  className="cursor-pointer items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all duration-300 flex bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  <span>Supabase Schema Rules</span>
-                </button>
               </div>
             </div>
 

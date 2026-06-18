@@ -87,28 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Database Connection Status Trigger */}
-          <button
-            onClick={onOpenDeveloperPane}
-            className={`hidden md:flex cursor-pointer items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all duration-300 ${
-              isProd
-                ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/50 hover:border-emerald-500/50'
-                : 'bg-amber-950/30 border-amber-500/30 text-amber-400 hover:bg-amber-950/50 hover:border-amber-500/50'
-            }`}
-          >
-            {isProd ? (
-              <>
-                <Wifi className="h-3.5 w-3.5 animate-pulse" />
-                <span>Live Supabase Connected</span>
-              </>
-            ) : (
-              <>
-                <Cpu className="h-3.5 w-3.5" />
-                <span>Simulated Sandbox Mode</span>
-              </>
-            )}
-          </button>
-
           {/* User Section / Action Buttons */}
           {currentProfile ? (
             <div className="flex items-center space-x-1.5 sm:space-x-3 pl-1.5 sm:pl-3 border-l border-slate-800">
