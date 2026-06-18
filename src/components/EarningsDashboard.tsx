@@ -481,31 +481,40 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   };
 
   return (
-    <div className="relative bg-[#0A0E17] min-h-[calc(100vh-4rem)] flex flex-col lg:flex-row select-none">
+    <div className="relative bg-[#0A0E17] min-h-[calc(100vh-4rem)] flex flex-col md:flex-row select-none">
       {/* Background cyber structures */}
       <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
 
       {/* MOBILE NAV BANNER */}
-      <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 backdrop-blur-md px-4 py-3.5 w-full shrink-0">
+      <div className="md:hidden sticky top-0 z-50 flex h-16 items-center justify-between bg-black border-b border-cyan-950/45 shadow-[0_1px_10px_rgba(0,191,255,0.15)] px-4 w-full shrink-0">
+        {/* LEFT: Menu / Hamburger */}
         <button
           onClick={() => setIsMobileMenuOpen(true)}
-          className="p-1.5 -ml-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+          className="p-2 -ml-1 text-[#00f2fe] hover:text-cyan-300 rounded-lg transition-all cursor-pointer"
         >
           <Menu className="h-6 w-6 text-cyan-400" />
         </button>
-        <div className="flex items-center space-x-1.5">
-          <span className="font-display text-sm font-black text-white">Watch<span className="text-cyan-450 bg-gradient-to-r from-cyan-400 to-electric-blue bg-clip-text text-transparent">2Earn</span></span>
-          <span className="text-[9px] bg-cyan-400/10 text-cyan-400 px-1.5 py-0.5 rounded font-mono font-bold">80% Share</span>
-        </div>
-        <div className="flex flex-col items-end">
-          <span className="font-mono text-xs font-bold text-emerald-400 animate-pulse">
-            {currentProfile.balance.toFixed(4)} USDT
+
+        {/* CENTER: Clean app branding */}
+        <div className="flex items-center">
+          <span className="font-display text-sm font-black uppercase tracking-widest text-[#00f2fe] bg-gradient-to-r from-cyan-400 to-electric-blue bg-clip-text text-transparent">
+            EXTREME
           </span>
+        </div>
+
+        {/* RIGHT: Glowing user balance */}
+        <div className="flex items-center">
+          <div className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-950/35 border border-emerald-500/20 px-2.5 py-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="font-mono text-xs font-extrabold text-emerald-400">
+              {currentProfile.balance.toFixed(4)} <span className="text-[9px] text-emerald-500 font-bold">USDT</span>
+            </span>
+          </div>
         </div>
       </div>
 
       {/* PERSISTENT SIDEBAR - DESKTOP */}
-      <aside className="hidden lg:flex flex-col w-64 border-r border-slate-800/80 bg-[#0C1221]/40 p-6 space-y-8 select-none shrink-0 z-20">
+      <aside className="hidden md:flex flex-col w-64 border-r border-slate-800/80 bg-[#0C1221]/40 p-6 space-y-8 select-none shrink-0 z-20">
         <div className="space-y-1">
           <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#06B6D4]">Control Console</span>
           <p className="text-[10px] text-slate-400 font-medium font-sans">Extreme v2.4 Portal</p>
@@ -524,7 +533,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
 
       {/* SLIDE-OUT MOBILE DRAWER NAV */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
+        <div className="fixed inset-0 z-50 flex md:hidden">
           {/* Backdrop overlay */}
           <div 
             onClick={() => setIsMobileMenuOpen(false)}
