@@ -895,6 +895,46 @@ export const api = {
 
         return profile;
       }
+    },
+
+    // Get the top 10 earners of the platform
+    async getLeaderboard(): Promise<UserProfile[]> {
+      const mockLeaderboard: UserProfile[] = [
+        { id: 'mock-u1', email: 'satoshi@w2e.io', full_name: 'Satoshi_Earn', balance: 1450.5500, total_earned: 2850.4000, total_platform_commission: 712.6000, wallet_address: '0x71C...8971', referral_count: 42, referral_earnings: 142.5000, created_at: new Date().toISOString() },
+        { id: 'mock-u2', email: 'vitalik@w2e.io', full_name: 'Vitalik_Fan', balance: 920.1200, total_earned: 1980.8500, total_platform_commission: 495.2100, wallet_address: '0x3dc...fa21', referral_count: 19, referral_earnings: 58.1000, created_at: new Date().toISOString() },
+        { id: 'mock-u3', email: 'cz@w2e.io', full_name: 'CZ_Watch_Daily', balance: 680.4000, total_earned: 1420.3000, total_platform_commission: 355.0750, wallet_address: '0x99a...ee34', referral_count: 31, referral_earnings: 99.4200, created_at: new Date().toISOString() },
+        { id: 'mock-u4', email: 'solana_maxi@w2e.io', full_name: 'Solana_Maxi', balance: 410.9500, total_earned: 980.5000, total_platform_commission: 245.1250, wallet_address: '0x1c4...ad45', referral_count: 12, referral_earnings: 34.2000, created_at: new Date().toISOString() },
+        { id: 'mock-u5', email: 'crypto_babe@w2e.io', full_name: 'Crypto_Queen', balance: 350.2205, total_earned: 875.4055, total_platform_commission: 218.8514, wallet_address: '0xf8e...9005', referral_count: 8, referral_earnings: 19.5000, created_at: new Date().toISOString() },
+        { id: 'mock-u6', email: 'usdt_miner@w2e.io', full_name: 'USDT_Vortex', balance: 290.4100, total_earned: 765.1200, total_platform_commission: 191.2800, wallet_address: '0xab2...bc88', referral_count: 15, referral_earnings: 44.5000, created_at: new Date().toISOString() },
+        { id: 'mock-u7', email: 'giga_chad@w2e.io', full_name: 'GigaEarn_99', balance: 180.0500, total_earned: 620.9500, total_platform_commission: 155.2375, wallet_address: '0xe22...dd11', referral_count: 7, referral_earnings: 12.0500, created_at: new Date().toISOString() },
+        { id: 'mock-u8', email: 'node_runner@w2e.io', full_name: 'NodeStreamer', balance: 142.1120, total_earned: 495.3400, total_platform_commission: 123.8350, wallet_address: '0xba9...88fe', referral_count: 5, referral_earnings: 8.4420, created_at: new Date().toISOString() },
+        { id: 'mock-u9', email: 'alpha_hunter@w2e.io', full_name: 'AlphaWatcher', balance: 95.8800, total_earned: 382.4500, total_platform_commission: 95.6125, wallet_address: '0xd7a...92cf', referral_count: 3, referral_earnings: 4.5000, created_at: new Date().toISOString() },
+        { id: 'mock-u10', email: 'ether_earner@w2e.io', full_name: 'Ether_Harvest', balance: 82.5040, total_earned: 310.2500, total_platform_commission: 77.5625, wallet_address: '0xcc1...aa22', referral_count: 2, referral_earnings: 2.1000, created_at: new Date().toISOString() }
+      ];
+
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('total_earned', { ascending: false })
+            .limit(10);
+            
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            if (data.length < 5) {
+              const ids = new Set(data.map(p => p.id));
+              const extra = mockLeaderboard.filter(m => !ids.has(m.id));
+              return [...data, ...extra].slice(0, 10) as UserProfile[];
+            }
+            return data as UserProfile[];
+          }
+        } catch (e) {
+          console.error('Failed to fetch real leaderboard, using mock data:', e);
+        }
+      }
+      return mockLeaderboard;
     }
   },
 

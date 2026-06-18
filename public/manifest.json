@@ -1,0 +1,29 @@
+{
+  "short_name": "Extreme",
+  "name": "Extreme | Watch to Earn USDT Portal",
+  "description": "Watch video ads, complete micro-tasks, and withdraw instantly with our transparent 80/20 Web3 sharing model.",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "32x32 48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0A0E17",
+  "theme_color": "#0A0E17",
+  "display": "standalone",
+  "orientation": "portrait"
+}

@@ -28,7 +28,8 @@ import {
   Menu,
   LayoutDashboard,
   Settings,
-  PlusCircle
+  PlusCircle,
+  Trophy
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
@@ -44,6 +45,7 @@ import { OffersView } from './dashboard/OffersView';
 import { TasksView } from './dashboard/TasksView';
 import { WithdrawView } from './dashboard/WithdrawView';
 import { SettingsView } from './dashboard/SettingsView';
+import LeaderboardView from './dashboard/LeaderboardView';
 
 interface EarningsDashboardProps {
   currentProfile: UserProfile;
@@ -64,7 +66,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   // Responsive tab and dialog state helpers
-  const [dashboardTab, setDashboardTab] = useState<'dashboard' | 'offers' | 'tasks' | 'withdraw' | 'settings'>('dashboard');
+  const [dashboardTab, setDashboardTab] = useState<'dashboard' | 'offers' | 'tasks' | 'withdraw' | 'settings' | 'leaderboard'>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -426,6 +428,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'offers', label: 'Offers', icon: Play },
     { id: 'tasks', label: 'Task', icon: Smartphone },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
     { id: 'withdraw', label: 'Withdraw', icon: Wallet },
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
@@ -839,6 +842,12 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             isProd={isProd}
             isSimulatingInvite={isSimulatingInvite}
             onSimulateInvite={handleSimulateInvite}
+          />
+        )}
+
+        {dashboardTab === 'leaderboard' && (
+          <LeaderboardView 
+            currentProfile={currentProfile}
           />
         )}
       </main>
