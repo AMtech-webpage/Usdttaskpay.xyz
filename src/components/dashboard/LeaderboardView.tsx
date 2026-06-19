@@ -11,7 +11,7 @@ export default function LeaderboardView({ currentProfile }: LeaderboardViewProps
   const [leaderboard, setLeaderboard] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<'total_earned' | 'referral_count' | 'balance'>('total_earned');
+  const [sortField, setSortField] = useState<'referral_count' | 'balance'>('balance');
 
   useEffect(() => {
     async function loadLeaderboard() {
@@ -31,9 +31,17 @@ export default function LeaderboardView({ currentProfile }: LeaderboardViewProps
   }, []);
 
   const sortedLeaderboard = [...leaderboard].sort((a, b) => {
-    const valA = a[sortField] || 0;
-    const valB = b[sortField] || 0;
-    return valB - valA;
+    if (sortField === 'balance') {
+      const balDiff = (b.balance || 0) - (a.balance || 0);
+      if (Math.abs(balDiff) > 0.000001) return balDiff;
+      // Secondary sort: referral count
+      return (b.referral_count || 0) - (a.referral_count || 0);
+    } else {
+      const refDiff = (b.referral_count || 0) - (a.referral_count || 0);
+      if (refDiff !== 0) return refDiff;
+      // Secondary sort: balance
+      return (b.balance || 0) - (a.balance || 0);
+    }
   });
 
   const getRankIcon = (index: number) => {
@@ -89,14 +97,14 @@ export default function LeaderboardView({ currentProfile }: LeaderboardViewProps
           <span className="text-xs font-medium text-slate-500">Rank by:</span>
           <div className="inline-flex rounded-lg bg-slate-950 p-1 border border-slate-800">
             <button
-              onClick={() => setSortField('total_earned')}
+              onClick={() => setSortField('balance')}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-200 ${
-                sortField === 'total_earned'
+                sortField === 'balance'
                   ? 'bg-gradient-to-r from-electric-blue to-cyan-500 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Total Earned
+              USDT Balance
             </button>
             <button
               onClick={() => setSortField('referral_count')}

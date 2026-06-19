@@ -14,7 +14,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onNavigateHome,
   initialState = 'login'
 }) => {
-  const [activeTab, setActiveTab] = useState<'login' | 'signup'>(initialState);
+  const [activeTab, setActiveTab] = useState<'login' | 'signup' | 'forgot' | 'new-password'>(initialState as any);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +23,79 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Password reset operations states
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [debugResetLink, setDebugResetLink] = useState<string | null>(null);
+
   const isProd = isSupabaseConfigured();
+
+  // Load recovery email if in secure reset state
+  React.useEffect(() => {
+    if (activeTab === 'new-password' || (initialState as any) === 'new-password') {
+      const cachedRecovery = localStorage.getItem('w2e_recovery_email');
+      if (cachedRecovery) {
+        setResetEmail(cachedRecovery);
+      }
+    }
+  }, [activeTab, initialState]);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      setErrorMsg('Please specify your Gmail address.');
+      return;
+    }
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setDebugResetLink(null);
+    try {
+      const res = await api.auth.sendResetLink(resetEmail);
+      setSuccessMsg(res.message);
+      if (res.recoveryUrl) {
+        setDebugResetLink(res.recoveryUrl);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to dispatch resetting link.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || !confirmPassword) {
+      setErrorMsg('Please fill in both password fields.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setErrorMsg('Your password must consist of at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const res = await api.auth.updatePassword(resetEmail, newPassword);
+      setSuccessMsg(res.message + ' Returning to login.');
+      setTimeout(() => {
+        setActiveTab('login');
+        setPassword(newPassword);
+        setEmail(resetEmail);
+        setSuccessMsg(null);
+      }, 2500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Critical failure setting user credentials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,47 +196,55 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Brand Banner */}
         <div className="text-center mb-6">
           <h2 className="font-display text-2xl font-extrabold text-white sm:text-3xl">
-            {activeTab === 'login' ? 'Welcome Back' : 'Create Account'}
+            {activeTab === 'login' && 'Welcome Back'}
+            {activeTab === 'signup' && 'Create Account'}
+            {activeTab === 'forgot' && 'Reset Password'}
+            {activeTab === 'verify-otp' && 'Verify OTP Code'}
+            {activeTab === 'new-password' && 'Choose Password'}
           </h2>
           <p className="mt-2 text-sm text-slate-400">
-            {activeTab === 'login'
-              ? 'Login to view your USDT wallet and start earning.'
-              : 'Sign up to keep 80% of ad revenue starting today.'}
+            {activeTab === 'login' && 'Login to view your USDT wallet and start earning.'}
+            {activeTab === 'signup' && 'Sign up to keep 80% of ad revenue starting today.'}
+            {activeTab === 'forgot' && 'Request a secure OTP code to your Gmail address.'}
+            {activeTab === 'verify-otp' && 'Enter the 6-digit credential passcode dispatched.'}
+            {activeTab === 'new-password' && 'Enter your brand new wallet access password.'}
           </p>
         </div>
 
         {/* Tab Selection */}
-        <div className="grid grid-cols-2 rounded-lg bg-slate-950 p-1 mb-6 border border-slate-800">
-          <button
-            onClick={() => {
-              setActiveTab('login');
-              setErrorMsg(null);
-              setSuccessMsg(null);
-            }}
-            className={`cursor-pointer py-2 rounded-md text-xs font-semibold tracking-wider uppercase transition-all ${
-              activeTab === 'login'
-                ? 'bg-gradient-to-r from-electric-blue to-cyan-500 text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Log In
-          </button>
-          
-          <button
-            onClick={() => {
-              setActiveTab('signup');
-              setErrorMsg(null);
-              setSuccessMsg(null);
-            }}
-            className={`cursor-pointer py-2 rounded-md text-xs font-semibold tracking-wider uppercase transition-all ${
-              activeTab === 'signup'
-                ? 'bg-gradient-to-r from-electric-blue to-cyan-500 text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Sign Up
-          </button>
-        </div>
+        {(activeTab === 'login' || activeTab === 'signup') && (
+          <div className="grid grid-cols-2 rounded-lg bg-slate-950 p-1 mb-6 border border-slate-800">
+            <button
+              onClick={() => {
+                setActiveTab('login');
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
+              className={`cursor-pointer py-2 rounded-md text-xs font-semibold tracking-wider uppercase transition-all ${
+                activeTab === 'login'
+                  ? 'bg-gradient-to-r from-electric-blue to-cyan-500 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Log In
+            </button>
+            
+            <button
+              onClick={() => {
+                setActiveTab('signup');
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
+              className={`cursor-pointer py-2 rounded-md text-xs font-semibold tracking-wider uppercase transition-all ${
+                activeTab === 'signup'
+                  ? 'bg-gradient-to-r from-electric-blue to-cyan-500 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+        )}
 
         {/* Status Messages */}
         {errorMsg && (
@@ -263,93 +343,245 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         )}
 
         {/* Form Fields */}
-        <form onSubmit={handleAuth} className="space-y-4">
-          
-          {/* Full Name for Signup */}
-          {activeTab === 'signup' && (
+        {(activeTab === 'login' || activeTab === 'signup') && (
+          <form onSubmit={handleAuth} className="space-y-4">
+            
+            {/* Full Name for Signup */}
+            {activeTab === 'signup' && (
+              <div>
+                <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <User className="h-4.5 w-4.5 text-slate-500" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Satoshi Nakamoto"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Email */}
             <div>
               <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
-                Full Name
+                Email Address
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <User className="h-4.5 w-4.5 text-slate-500" />
+                  <Mail className="h-4.5 w-4.5 text-slate-500" />
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  placeholder="e.g. Satoshi Nakamoto"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="developer@w2e.network"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
                 />
               </div>
             </div>
-          )}
 
-          {/* Email */}
-          <div>
-            <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
-              Email Address
-            </label>
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                <Mail className="h-4.5 w-4.5 text-slate-500" />
+            {/* Password */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase">
+                  Password
+                </label>
+                {activeTab === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (email) {
+                        setResetEmail(email);
+                      }
+                      setActiveTab('forgot');
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                    }}
+                    className="text-[11px] font-mono hover:underline text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
               </div>
-              <input
-                type="email"
-                required
-                placeholder="developer@w2e.network"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
-              />
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Lock className="h-4.5 w-4.5 text-slate-500" />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-10 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                <Lock className="h-4.5 w-4.5 text-slate-500" />
+            {/* Register Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-electric-blue via-blue-600 to-cyan-500 py-3.5 text-sm font-bold text-white transition-all duration-300 glow-btn hover:brightness-110 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
+                  <span>Verifying Signatures...</span>
+                </>
+              ) : (
+                <span>{activeTab === 'login' ? 'Access App Dashboard' : 'Secure Sign Up'}</span>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* --- Direct Reset Link Forgot Password Recovery Views --- */}
+        {activeTab === 'forgot' && (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            {debugResetLink && (
+              <div className="p-4 rounded-xl border border-cyan-500/25 bg-[#0F1524] text-xs font-sans leading-relaxed space-y-2 text-slate-350 shadow-lg">
+                <div className="font-bold font-mono uppercase tracking-widest text-cyan-400 flex items-center gap-1.5 mb-1 text-[10px]">
+                  <Cpu className="h-4 w-4 text-cyan-400" />
+                  <span>Sandbox Mail Simulator</span>
+                </div>
+                <p>
+                  A cryptographically signed password reset URL was generated:
+                </p>
+                <a
+                  href={debugResetLink}
+                  className="block p-2.5 rounded-lg border border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-950/45 text-cyan-400 font-mono text-[11px] font-bold text-center underline break-all leading-snug cursor-pointer transition-all"
+                >
+                  Click Here To Reset Password &rarr;
+                </a>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  In production, this unique recovery URL is routed securely via premium email APIs directly to the user's Gmail box.
+                </p>
               </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-10 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
-              />
+            )}
+
+            <div>
+              <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
+                Enter Your Gmail Address
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Mail className="h-4.5 w-4.5 text-slate-500" />
+                </div>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. myaccount@gmail.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-electric-blue via-blue-600 to-cyan-500 py-3.5 text-sm font-bold text-white transition-all duration-300 glow-btn hover:brightness-110 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
+                  <span>Generating Secure Link...</span>
+                </>
+              ) : (
+                <span>Request Recovery Link</span>
+              )}
+            </button>
+
+            <div className="text-center pt-2">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-white transition-colors"
+                onClick={() => {
+                  setActiveTab('login');
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                  setDebugResetLink(null);
+                }}
+                className="text-xs text-slate-400 hover:text-white hover:underline font-mono cursor-pointer"
               >
-                {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+                &larr; Back to Login Gateway
               </button>
             </div>
-          </div>
+          </form>
+        )}
 
-          {/* Register Submit Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-electric-blue via-blue-600 to-cyan-500 py-3.5 text-sm font-bold text-white transition-all duration-300 glow-btn hover:brightness-110 disabled:opacity-50"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4.5 w-4.5 animate-spin" />
-                <span>Verifying Signatures...</span>
-              </>
-            ) : (
-              <span>{activeTab === 'login' ? 'Access App Dashboard' : 'Secure Sign Up'}</span>
-            )}
-          </button>
-        </form>
+        {activeTab === 'new-password' && (
+          <form onSubmit={handleNewPassword} className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
+                New Entry Password
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Lock className="h-4.5 w-4.5 text-slate-500" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  placeholder="Min 6 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-bold tracking-wide text-slate-400 uppercase mb-2">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Lock className="h-4.5 w-4.5 text-slate-500" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  placeholder="Match password above"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 py-3 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="cursor-pointer flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-electric-blue via-blue-600 to-cyan-500 py-3.5 text-sm font-bold text-white transition-all duration-300 glow-btn hover:brightness-110 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
+                  <span>Configuring security keys...</span>
+                </>
+              ) : (
+                <span>Confirm New Password</span>
+              )}
+            </button>
+          </form>
+        )}
 
         {/* Security Notice */}
         <div className="mt-6 flex items-start space-x-2.5 rounded-lg bg-slate-950 p-3.5 border border-slate-800/20">

@@ -16,7 +16,7 @@ import { ShieldAlert, BookOpen, ExternalLink, Mail, Github, Compass, Sparkles, D
 export default function App() {
   const [currentProfile, setCurrentProfile] = useState<UserProfile | null>(null);
   const [currentPage, setCurrentPage] = useState<'home' | 'dashboard' | 'auth' | 'privacy' | 'terms' | 'contact' | 'teams' | 'services'>('home');
-  const [authInitialTab, setAuthInitialTab] = useState<'login' | 'signup'>('login');
+  const [authInitialTab, setAuthInitialTab] = useState<'login' | 'signup' | 'new-password'>('login');
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
   // Cybersecurity VPN Protection state parameters
@@ -37,6 +37,24 @@ export default function App() {
     if (referralCode) {
       localStorage.setItem('w2e_referrer_code', referralCode);
       console.log('Captured inviter referral code:', referralCode);
+    }
+
+    // Capture and route secure password recovery links instantly
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    if (search.includes('recovery=true') || hash.includes('type=recovery') || hash.includes('access_token=')) {
+      const allParams = new URLSearchParams(search || hash.replace('#', '?'));
+      const activeRecoveryEmail = allParams.get('email') || '';
+      if (activeRecoveryEmail) {
+        localStorage.setItem('w2e_recovery_email', activeRecoveryEmail);
+      }
+      setAuthInitialTab('new-password');
+      setCurrentPage('auth');
+      
+      // Gracefully clean trailing parameters from address bar
+      try {
+        window.history.replaceState(null, '', window.location.pathname);
+      } catch (_) {}
     }
 
     const runSecurityAudit = async () => {
