@@ -8,12 +8,14 @@ import FAQSection from './components/FAQSection';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { ContactView } from './components/ContactView';
+import { TeamsView } from './components/TeamsView';
+import { ServicesView } from './components/ServicesView';
 import { verifyUserSecurity, SecurityTelemetry } from './lib/security';
 import { ShieldAlert, BookOpen, ExternalLink, Mail, Github, Compass, Sparkles, Database, ShieldCheck, HelpCircle, RefreshCw, AlertOctagon } from 'lucide-react';
 
 export default function App() {
   const [currentProfile, setCurrentProfile] = useState<UserProfile | null>(null);
-  const [currentPage, setCurrentPage] = useState<'home' | 'dashboard' | 'auth' | 'privacy' | 'terms' | 'contact'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'dashboard' | 'auth' | 'privacy' | 'terms' | 'contact' | 'teams' | 'services'>('home');
   const [authInitialTab, setAuthInitialTab] = useState<'login' | 'signup'>('login');
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
@@ -40,12 +42,7 @@ export default function App() {
     const runSecurityAudit = async () => {
       try {
         const telemetry = await verifyUserSecurity();
-        const isDevEnv = window.location.hostname === 'localhost' || 
-                         window.location.hostname === '127.0.0.1' || 
-                         window.location.hostname.includes('.run.app') || 
-                         window.location.hostname.includes('aistudio');
-
-        if (telemetry.isProxyOrVpn && !isDevEnv) {
+        if (telemetry.isProxyOrVpn) {
           setSecurityBlock({ blocked: true, telemetry });
         } else {
           setSecurityBlock({ blocked: false, telemetry });
@@ -131,12 +128,12 @@ export default function App() {
             </div>
             <div>
               <span className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">Security Ingress Firewalled</span>
-              <h2 className="text-xl sm:text-2xl font-black text-white">Access Denied</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-white">VPN or Proxy Not Allowed</h2>
             </div>
           </div>
 
           <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-            Access Denied: VPN, Proxy, or Unverified Location Detected. Please disable your VPN to access <strong className="text-cyan-400 font-mono">usdt-task.xyz</strong>.
+            Strict Security Policy: <strong className="text-red-400 font-bold">VPN or proxy connections are not allowed on this platform.</strong> To ensure reward validity and combat automated Sybil farming, you must use a standard home ISP connection. Please disable your VPN/Proxy instantly to access <strong className="text-cyan-400 font-mono">usdt-task.xyz</strong>.
           </p>
 
           <div className="space-y-4 bg-slate-950/90 border border-slate-900 rounded-xl p-5 font-mono text-[11px] text-slate-400 leading-relaxed">
@@ -233,6 +230,14 @@ export default function App() {
           <TermsOfServiceView 
             onBack={() => setCurrentPage(currentProfile ? 'dashboard' : 'home')}
           />
+        ) : currentPage === 'teams' ? (
+          <TeamsView 
+            onBack={() => setCurrentPage(currentProfile ? 'dashboard' : 'home')}
+          />
+        ) : currentPage === 'services' ? (
+          <ServicesView 
+            onBack={() => setCurrentPage(currentProfile ? 'dashboard' : 'home')}
+          />
         ) : currentPage === 'contact' ? (
           <ContactView 
             currentProfile={currentProfile}
@@ -301,10 +306,12 @@ export default function App() {
 
           <div className="border-t border-slate-900 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-mono text-slate-500">
             <span>© 2026 Watch2Earn Global Networks LTD. All rights reserved.</span>
-            <div className="flex items-center space-x-4">
-              <span onClick={() => setCurrentPage('contact')} className="hover:text-cyan-400 font-bold text-emerald-400 cursor-pointer transition-colors duration-200">Help & Support Desk</span>
-              <span onClick={() => setCurrentPage('terms')} className="hover:text-slate-300 hover:text-cyan-400 cursor-pointer transition-colors duration-200">Terms of Service</span>
-              <span onClick={() => setCurrentPage('privacy')} className="hover:text-slate-300 hover:text-cyan-400 cursor-pointer transition-colors duration-200">Privacy Policy</span>
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-2">
+              <span onClick={() => setCurrentPage('teams')} className="hover:text-cyan-400 cursor-pointer transition-colors duration-200 text-slate-400">Our Team</span>
+              <span onClick={() => setCurrentPage('services')} className="hover:text-cyan-400 cursor-pointer transition-colors duration-200 text-slate-400">Services & APIs</span>
+              <span onClick={() => setCurrentPage('terms')} className="hover:text-cyan-400 cursor-pointer transition-colors duration-200 text-slate-400 font-medium">Terms of Service</span>
+              <span onClick={() => setCurrentPage('privacy')} className="hover:text-cyan-400 cursor-pointer transition-colors duration-200 text-slate-400 font-medium">Privacy Policy</span>
+              <span onClick={() => setCurrentPage('contact')} className="hover:text-cyan-400 font-bold text-emerald-400 cursor-pointer transition-colors duration-200">Help Desk</span>
             </div>
           </div>
         </div>
