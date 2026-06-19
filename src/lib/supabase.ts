@@ -33,7 +33,9 @@ const OPTIONAL_COLUMNS = [
   'referral_earnings',
   'referral_count',
   'total_platform_commission',
-  'wallet_address'
+  'wallet_address',
+  'last_login_date',
+  'login_streak'
 ];
 
 const detectedMissingColumns = new Set<string>();
@@ -199,7 +201,7 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   
   const defaultFields = ['id', 'email', 'full_name', 'balance', 'total_earned', 'created_at'];
   if (!supabase) {
-    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count'];
+    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak'];
     return detectedColumns;
   }
   
@@ -221,7 +223,7 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   
   // Proactively test presence of optional/referral related columns
   const finalFields = [...defaultFields];
-  const testFields = ['total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count'];
+  const testFields = ['total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak'];
   
   for (const field of testFields) {
     try {
@@ -1099,6 +1101,225 @@ export const api = {
         }
       }
       return mockLeaderboard;
+    },
+
+    // Daily consecutive check-in login streak & rewards engine
+    async checkAndApplyDailyLoginBonus(userId: string): Promise<{ profile: UserProfile; streak: number; reward: number; awarded: boolean }> {
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const getYesterdayStr = () => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+      };
+      const yesterdayStr = getYesterdayStr();
+
+      const getBonusAmount = (streak: number) => {
+        const bonuses = [0.0100, 0.0200, 0.0350, 0.0500, 0.0800, 0.1200, 0.2500];
+        return bonuses[Math.min(streak - 1, bonuses.length - 1)];
+      };
+
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          const columns = await getAvailableProfileColumns();
+          
+          const { data: profile, error: getErr } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (getErr) throw getErr;
+          if (!profile) throw new Error('UserProfile not found during login check');
+
+          const lastLogin = profile.last_login_date || '';
+          const currentStreak = profile.login_streak || 0;
+
+          if (lastLogin === todayStr) {
+            return { profile: profile as UserProfile, streak: currentStreak, reward: 0, awarded: false };
+          }
+
+          let newStreak = 1;
+          if (lastLogin === yesterdayStr) {
+            newStreak = currentStreak + 1;
+          }
+
+          const rewardAmount = getBonusAmount(newStreak);
+
+          const updatePayload: any = {
+            balance: parseFloat(((profile.balance || 0) + rewardAmount).toFixed(6)),
+            total_earned: parseFloat(((profile.total_earned || 0) + rewardAmount).toFixed(6))
+          };
+
+          if (columns.includes('last_login_date')) {
+            updatePayload.last_login_date = todayStr;
+          }
+          if (columns.includes('login_streak')) {
+            updatePayload.login_streak = newStreak;
+          }
+
+          const { data: updated, error: updateErr } = await supabase
+            .from('profiles')
+            .update(updatePayload)
+            .eq('id', userId)
+            .select()
+            .maybeSingle();
+
+          if (updateErr) throw updateErr;
+
+          // Insert audit trail
+          await supabase
+            .from('transactions')
+            .insert({
+              user_id: userId,
+              type: 'microtask',
+              amount: rewardAmount,
+              status: 'completed',
+              description: `USDT Login Reward (Day ${newStreak} Streak Boost)`,
+              tx_hash: `0xcheckin-${Math.random().toString(16).substring(2, 10)}`
+            });
+
+          // Dispatch 5% referral bonus if referred_by is set and supported
+          if (columns.includes('referred_by') && profile.referred_by) {
+            try {
+              const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
+              const refColsToSelect = ['balance', 'total_earned'];
+              if (columns.includes('referral_earnings')) {
+                refColsToSelect.push('referral_earnings');
+              }
+              
+              const { data: referrer, error: refErr } = await supabase
+                .from('profiles')
+                .select(refColsToSelect.join(', '))
+                .eq('id', profile.referred_by)
+                .maybeSingle();
+
+              if (!refErr && referrer) {
+                const referrerAny = referrer as any;
+                const updatedRefBalance = (referrerAny.balance || 0) + referralBonus;
+                const updatedRefTotal = (referrerAny.total_earned || 0) + referralBonus;
+                const updatedRefEarnings = (referrerAny.referral_earnings || 0) + referralBonus;
+
+                const refUpdatePayload: any = {
+                  balance: parseFloat(updatedRefBalance.toFixed(6)),
+                  total_earned: parseFloat(updatedRefTotal.toFixed(6))
+                };
+                if (columns.includes('referral_earnings')) {
+                  refUpdatePayload.referral_earnings = parseFloat(updatedRefEarnings.toFixed(6));
+                }
+
+                await supabase
+                  .from('profiles')
+                  .update(refUpdatePayload)
+                  .eq('id', profile.referred_by);
+
+                // Register transaction log for inviter
+                await supabase
+                  .from('transactions')
+                  .insert({
+                    user_id: profile.referred_by,
+                    type: 'microtask',
+                    amount: referralBonus,
+                    status: 'completed',
+                    description: `5% Invite Yield from ${profile.full_name || 'Invitee'} Daily check-in`,
+                    tx_hash: `0xbonus-checkin-${Math.random().toString(36).substring(2, 12)}`
+                  });
+              }
+            } catch (err) {
+              console.warn('[Referral Daily Bonus Split Failed]', err);
+            }
+          }
+
+          return { 
+            profile: (updated || profile) as UserProfile, 
+            streak: newStreak, 
+            reward: rewardAmount, 
+            awarded: true 
+          };
+        } catch (e) {
+          console.error('[Daily Bonus Database Failed, Falling back]', e);
+        }
+      }
+
+      // Simulated local offline path
+      const profileKey = `w2e_profile_${userId}`;
+      const profile = getLocalData<UserProfile>(profileKey, {
+        id: userId,
+        email: 'sandbox@w2e.network',
+        full_name: 'Simulated User',
+        balance: 0,
+        total_earned: 0,
+        total_platform_commission: 0,
+        created_at: new Date().toISOString()
+      });
+
+      const lastLogin = profile.last_login_date || '';
+      const currentStreak = profile.login_streak || 0;
+
+      if (lastLogin === todayStr) {
+        return { profile, streak: currentStreak, reward: 0, awarded: false };
+      }
+
+      let newStreak = 1;
+      if (lastLogin === yesterdayStr) {
+        newStreak = currentStreak + 1;
+      }
+
+      const rewardAmount = getBonusAmount(newStreak);
+      profile.balance = parseFloat((profile.balance + rewardAmount).toFixed(6));
+      profile.total_earned = parseFloat((profile.total_earned + rewardAmount).toFixed(6));
+      profile.last_login_date = todayStr;
+      profile.login_streak = newStreak;
+      setLocalData(profileKey, profile);
+
+      const txKey = `w2e_transactions_${userId}`;
+      const transactions = getLocalData<Transaction[]>(txKey, []);
+      transactions.unshift({
+        id: `tx-login-${Math.random().toString(36).substring(2, 9)}`,
+        user_id: userId,
+        type: 'microtask',
+        amount: rewardAmount,
+        status: 'completed',
+        tx_hash: `0xsim-login-${Math.random().toString(16).substring(2, 12)}`,
+        created_at: new Date().toISOString(),
+        description: `USDT Login Reward (Day ${newStreak} Streak Boost)`
+      });
+      setLocalData(txKey, transactions);
+
+      // Invite referral split simulation
+      if (profile.referred_by) {
+        try {
+          const referrerId = profile.referred_by;
+          const referrerKey = `w2e_profile_${referrerId}`;
+          const referrerProfile = getLocalData<UserProfile | null>(referrerKey, null);
+
+          if (referrerProfile) {
+            const referralBonus = parseFloat((rewardAmount * 0.05).toFixed(6));
+            referrerProfile.balance = parseFloat((referrerProfile.balance + referralBonus).toFixed(6));
+            referrerProfile.total_earned = parseFloat((referrerProfile.total_earned + referralBonus).toFixed(6));
+            referrerProfile.referral_earnings = parseFloat(((referrerProfile.referral_earnings || 0) + referralBonus).toFixed(6));
+            setLocalData(referrerKey, referrerProfile);
+
+            const refTxKey = `w2e_transactions_${referrerId}`;
+            const refTransactions = getLocalData<Transaction[]>(refTxKey, []);
+            refTransactions.unshift({
+              id: `tx-ref-login-${Math.random().toString(36).substring(2, 9)}`,
+              user_id: referrerId,
+              type: 'microtask',
+              amount: referralBonus,
+              status: 'completed',
+              tx_hash: `0xsim-ref-login-${Math.random().toString(16).substring(2, 12)}`,
+              created_at: new Date().toISOString(),
+              description: `5% Invite Yield from ${profile.full_name || 'Invitee'} Daily Streak`
+            });
+            setLocalData(refTxKey, refTransactions);
+          }
+        } catch (simRefErr) {
+          console.error(simRefErr);
+        }
+      }
+
+      return { profile, streak: newStreak, reward: rewardAmount, awarded: true };
     }
   },
 

@@ -98,6 +98,10 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [isSimulatingInvite, setIsSimulatingInvite] = useState(false);
 
+  // Timeframe and daily login check-in modal states
+  const [timeframe, setTimeframe] = useState<7 | 30>(7);
+  const [showDailyBonusAlert, setShowDailyBonusAlert] = useState<{ streak: number; reward: number } | null>(null);
+
   const inviteLink = `${window.location.origin}${window.location.pathname}?ref=${currentProfile.referral_code || currentProfile.id}`;
 
   const copyInviteLink = () => {
@@ -110,7 +114,8 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     const data: { date: string; amount: number }[] = [];
     const now = new Date();
     
-    for (let i = 29; i >= 0; i--) {
+    const limit = timeframe;
+    for (let i = limit - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(now.getDate() - i);
       const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -135,9 +140,10 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     const hasTxPoints = data.some((item) => item.amount > 0);
     if (!hasTxPoints && currentProfile.total_earned > 0) {
       const total = currentProfile.total_earned;
-      const pieces = 5;
+      const pieces = Math.min(5, limit);
       const share = total / pieces;
-      [5, 12, 18, 24, 28].forEach((idx, i) => {
+      const seedIndices = limit === 7 ? [1, 2, 4, 5, 6] : [5, 12, 18, 24, 28];
+      seedIndices.forEach((idx, i) => {
         if (data[idx]) {
           data[idx].amount = parseFloat((share * (1 + (i % 3) * 0.1)).toFixed(4));
         }
@@ -277,6 +283,30 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   useEffect(() => {
     loadDashboardData();
   }, [currentProfile.id]);
+
+  // Automatic login check-in streak verification upon dashboard mounting
+  useEffect(() => {
+    const runCheckIn = async () => {
+      try {
+        const result = await api.profiles.checkAndApplyDailyLoginBonus(currentProfile.id);
+        if (result && result.awarded) {
+          setShowDailyBonusAlert({
+            streak: result.streak,
+            reward: result.reward
+          });
+          onProfileChange(result.profile);
+          // Update transaction records with check-in log
+          const liveTransactions = await api.transactions.list(currentProfile.id);
+          setTransactions(liveTransactions);
+        }
+      } catch (e) {
+        console.warn('Dynamic login streak verification failed:', e);
+      }
+    };
+    if (currentProfile?.id) {
+      runCheckIn();
+    }
+  }, [currentProfile?.id]);
 
   // Video Ad player countdown clock callback
   useEffect(() => {
@@ -624,7 +654,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             {/* Triple Summary Cards (Bento style) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
               {/* Main Balance Display Card (span 6) */}
-              <div className="md:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
+              <div className="md:col-span-12 xl:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
                 
                 <div>
@@ -665,8 +695,8 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Cumulative Earned Card (span 3) */}
-              <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+              {/* Cumulative Earned Card (span 2) */}
+              <div className="md:col-span-4 xl:col-span-2 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">All-Time Revenue</span>
@@ -681,19 +711,38 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 </div>
               </div>
 
-              {/* House Platform Fee card (span 3) */}
-              <div className="md:col-span-3 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
+              {/* House Platform Fee card (span 2) */}
+              <div className="md:col-span-4 xl:col-span-2 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Platform Commission</span>
                   </div>
                   <p className="text-2xl font-mono font-bold text-cyan-400 tracking-tight">{aggregateCommissionPaid.toFixed(4)} <span className="text-xs text-slate-400 font-sans">USDT</span></p>
-                  <p className="text-[10px] text-slate-400 mt-1">20% fee reserved for routing protocols and cloud server databases.</p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">20% fee reserved for routing protocols and database servers.</p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-cyan-400 font-mono">
                   <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
                   <span>20% Model Verified</span>
+                </div>
+              </div>
+
+              {/* Dynamic Login Streak Card (span 2) */}
+              <div className="md:col-span-4 xl:col-span-2 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Flame className="h-10 w-10 text-orange-500" />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Daily Login Bonus</span>
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-orange-500 tracking-tight">{currentProfile.login_streak || 0} <span className="text-xs text-slate-400 font-sans">Days</span></p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">Streak resets if check-in is missed by 24h.</p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-orange-400 font-mono">
+                  <Flame className="h-3.5 w-3.5 shrink-0 animate-pulse text-orange-500" />
+                  <span>Consecutive Reward Boosted</span>
                 </div>
               </div>
             </div>
@@ -706,18 +755,24 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                     <TrendingUp className="h-5 w-5 text-cyan-400" />
                     <h3 className="font-display font-extrabold text-lg text-white">USDT Yield Trend</h3>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Visualizing your authentic attention share performance across the past 30 days.
+                  <p className="text-xs text-slate-400 mt-1 font-sans">
+                    Visualizing your authentic attention share performance over the {timeframe === 7 ? 'past week' : 'past month'}.
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-4 bg-slate-900/40 p-1.5 rounded-lg border border-white/5 w-fit">
-                  <span className="text-[10px] text-cyan-400 font-mono font-bold px-2 py-0.5 bg-cyan-500/10 rounded">
-                    Cycle: 30D Trend
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono pr-2">
-                    Avg. Yield: {((currentProfile.total_earned || 0) / 30).toFixed(4)} USDT/day
-                  </span>
+                <div className="flex items-center gap-2 bg-[#0C111D] p-1 rounded-xl border border-white/5 w-fit">
+                  <button
+                    onClick={() => setTimeframe(7)}
+                    className={`cursor-pointer text-[10px] uppercase font-mono font-bold px-3 py-1.5 rounded-lg transition-all ${timeframe === 7 ? 'bg-gradient-to-r from-cyan-500 to-sky-500 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                  >
+                    Past Week (7D)
+                  </button>
+                  <button
+                    onClick={() => setTimeframe(30)}
+                    className={`cursor-pointer text-[10px] uppercase font-mono font-bold px-3 py-1.5 rounded-lg transition-all ${timeframe === 30 ? 'bg-gradient-to-r from-cyan-500 to-sky-500 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                  >
+                    Past Month (30D)
+                  </button>
                 </div>
               </div>
 
@@ -890,7 +945,56 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
         )}
       </main>
 
+      {/* CONSECUTIVE DAILY LOGIN STREAK REWARD SUCCESS DIALOG */}
+      {showDailyBonusAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div 
+            className="relative max-w-sm w-full bg-[#111622] border border-orange-550/30 rounded-3xl p-6 shadow-2xl text-center overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500" />
+            <div className="absolute -right-10 -top-10 h-32 w-32 bg-orange-500/10 blur-2xl rounded-full" />
+            
+            <button 
+              onClick={() => setShowDailyBonusAlert(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-all cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
 
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 border border-orange-500/20 mb-4 text-orange-450 animate-bounce">
+              <Flame className="h-7 w-7 text-orange-500" />
+            </div>
+
+            <span className="font-mono text-[9px] uppercase tracking-widest text-orange-400 font-bold block">
+              Dynamic On-Chain Loyalty Split
+            </span>
+            <h3 className="font-display text-xl font-bold text-white mt-1">
+              Login Streak Awarded!
+            </h3>
+            
+            <div className="bg-slate-950/50 rounded-2xl p-4 my-4 border border-white/5 font-mono">
+              <p className="text-xs text-slate-400">Current Login Streak</p>
+              <p className="text-2xl font-black text-white mt-0.5">{showDailyBonusAlert.streak} Days</p>
+              
+              <div className="h-px bg-white/5 my-2" />
+              
+              <p className="text-xs text-slate-400">Claimed Rewards</p>
+              <p className="text-xl font-black text-orange-400 mt-0.5">+{showDailyBonusAlert.reward.toFixed(4)} USDT</p>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed font-sans mt-2">
+              Consecutive login bonuses scale automatically up to 7+ days. Keep streaming tomorrow to expand your yield split!
+            </p>
+
+            <button
+              onClick={() => setShowDailyBonusAlert(null)}
+              className="cursor-pointer mt-5 w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:brightness-110 active:scale-[0.98] rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-orange-500/15 border border-orange-400/20 transition-all font-sans"
+            >
+              Claim & Start Tasks
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ADVERTISING / ADD TASK CALL-TO-ACTION DIALOG POPUP */}
       {isAddTaskModalOpen && (

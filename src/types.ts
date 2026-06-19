@@ -11,6 +11,8 @@ export interface UserProfile {
   referral_code?: string; // Unique referral code of this user
   referral_earnings?: number; // Cumulative passive earnings from invitees (5% bonus)
   referral_count?: number; // Total number of successfully referred users
+  last_login_date?: string; // Daily Login tracker
+  login_streak?: number; // Number of consecutive login days
 }
 
 export interface AdCampaign {
