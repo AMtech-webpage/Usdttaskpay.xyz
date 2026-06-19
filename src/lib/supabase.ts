@@ -1103,8 +1103,8 @@ export const api = {
       return mockLeaderboard;
     },
 
-    // Daily consecutive check-in login streak & rewards engine
-    async checkAndApplyDailyLoginBonus(userId: string): Promise<{ profile: UserProfile; streak: number; reward: number; awarded: boolean }> {
+    // Daily consecutive check-in login streak & rewards engine (Strict: 0.0001 USDT, once per day, requires at least 1 task/ad-watch completed today)
+    async checkAndApplyDailyLoginBonus(userId: string): Promise<{ profile: UserProfile; streak: number; reward: number; awarded: boolean; message?: string }> {
       const todayStr = new Date().toISOString().split('T')[0];
       
       const getYesterdayStr = () => {
@@ -1114,10 +1114,7 @@ export const api = {
       };
       const yesterdayStr = getYesterdayStr();
 
-      const getBonusAmount = (streak: number) => {
-        const bonuses = [0.0100, 0.0200, 0.0350, 0.0500, 0.0800, 0.1200, 0.2500];
-        return bonuses[Math.min(streak - 1, bonuses.length - 1)];
-      };
+      const rewardAmount = 0.0001; // Strict: Exactly 0.0001 USDT reward
 
       if (isSupabaseConfigured() && supabase) {
         try {
@@ -1136,15 +1133,46 @@ export const api = {
           const currentStreak = profile.login_streak || 0;
 
           if (lastLogin === todayStr) {
-            return { profile: profile as UserProfile, streak: currentStreak, reward: 0, awarded: false };
+            return { 
+              profile: profile as UserProfile, 
+              streak: currentStreak, 
+              reward: 0, 
+              awarded: false, 
+              message: 'You have already claimed your daily check-in bonus today!' 
+            };
+          }
+
+          // Strict boundary: Fetch transactions for the current user created today to verify task completion
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+
+          const { data: todayTxs, error: txsErr } = await supabase
+            .from('transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .in('type', ['watch_ad', 'microtask'])
+            .gte('created_at', startOfToday.toISOString());
+
+          if (txsErr) {
+            console.warn('Prerequisite check error from transactions:', txsErr);
+          }
+
+          const completedTaskToday = todayTxs && todayTxs.length > 0;
+
+          if (!completedTaskToday) {
+            return {
+              profile: profile as UserProfile,
+              streak: currentStreak,
+              reward: 0,
+              awarded: false,
+              message: 'Task Prerequisite Required: You must complete at least one task or watch an ad today before you can claim your daily check-in reward!'
+            };
           }
 
           let newStreak = 1;
           if (lastLogin === yesterdayStr) {
             newStreak = currentStreak + 1;
           }
-
-          const rewardAmount = getBonusAmount(newStreak);
 
           const updatePayload: any = {
             balance: parseFloat(((profile.balance || 0) + rewardAmount).toFixed(6)),
@@ -1175,7 +1203,7 @@ export const api = {
               type: 'microtask',
               amount: rewardAmount,
               status: 'completed',
-              description: `USDT Login Reward (Day ${newStreak} Streak Boost)`,
+              description: `USDT Daily Bonus Check-in (Day ${newStreak} Streak Boost)`,
               tx_hash: `0xcheckin-${Math.random().toString(16).substring(2, 10)}`
             });
 
@@ -1257,7 +1285,34 @@ export const api = {
       const currentStreak = profile.login_streak || 0;
 
       if (lastLogin === todayStr) {
-        return { profile, streak: currentStreak, reward: 0, awarded: false };
+        return { 
+          profile, 
+          streak: currentStreak, 
+          reward: 0, 
+          awarded: false, 
+          message: 'You have already claimed your daily check-in bonus today!' 
+        };
+      }
+
+      // Local storage check for tasks completed today
+      const txKey = `w2e_transactions_${userId}`;
+      const transactions = getLocalData<Transaction[]>(txKey, []);
+      const startOfTodayLocal = new Date();
+      startOfTodayLocal.setHours(0, 0, 0, 0);
+
+      const completedTaskLocal = transactions.some(t => 
+        (t.type === 'watch_ad' || t.type === 'microtask') && 
+        new Date(t.created_at) >= startOfTodayLocal
+      );
+
+      if (!completedTaskLocal) {
+        return {
+          profile,
+          streak: currentStreak,
+          reward: 0,
+          awarded: false,
+          message: 'Task Prerequisite Required: You must complete at least one task or watch an ad today before you can claim your daily check-in reward!'
+        };
       }
 
       let newStreak = 1;
@@ -1265,15 +1320,12 @@ export const api = {
         newStreak = currentStreak + 1;
       }
 
-      const rewardAmount = getBonusAmount(newStreak);
       profile.balance = parseFloat((profile.balance + rewardAmount).toFixed(6));
       profile.total_earned = parseFloat((profile.total_earned + rewardAmount).toFixed(6));
       profile.last_login_date = todayStr;
       profile.login_streak = newStreak;
       setLocalData(profileKey, profile);
 
-      const txKey = `w2e_transactions_${userId}`;
-      const transactions = getLocalData<Transaction[]>(txKey, []);
       transactions.unshift({
         id: `tx-login-${Math.random().toString(36).substring(2, 9)}`,
         user_id: userId,
@@ -1282,7 +1334,7 @@ export const api = {
         status: 'completed',
         tx_hash: `0xsim-login-${Math.random().toString(16).substring(2, 12)}`,
         created_at: new Date().toISOString(),
-        description: `USDT Login Reward (Day ${newStreak} Streak Boost)`
+        description: `USDT Daily Bonus Check-in (Day ${newStreak} Streak Boost)`
       });
       setLocalData(txKey, transactions);
 

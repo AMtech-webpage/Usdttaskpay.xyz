@@ -4,6 +4,7 @@ import {
   Coins, 
   Wallet, 
   Play, 
+  Check,
   CheckCircle, 
   ArrowUpRight, 
   Smartphone, 
@@ -284,29 +285,33 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
     loadDashboardData();
   }, [currentProfile.id]);
 
-  // Automatic login check-in streak verification upon dashboard mounting
-  useEffect(() => {
-    const runCheckIn = async () => {
-      try {
-        const result = await api.profiles.checkAndApplyDailyLoginBonus(currentProfile.id);
-        if (result && result.awarded) {
-          setShowDailyBonusAlert({
-            streak: result.streak,
-            reward: result.reward
-          });
-          onProfileChange(result.profile);
-          // Update transaction records with check-in log
-          const liveTransactions = await api.transactions.list(currentProfile.id);
-          setTransactions(liveTransactions);
-        }
-      } catch (e) {
-        console.warn('Dynamic login streak verification failed:', e);
+  const [isClaimingBonus, setIsClaimingBonus] = useState(false);
+  const [bonusClaimError, setBonusClaimError] = useState<string | null>(null);
+
+  const handleClaimDailyBonus = async () => {
+    setIsClaimingBonus(true);
+    setBonusClaimError(null);
+    try {
+      const result = await api.profiles.checkAndApplyDailyLoginBonus(currentProfile.id);
+      if (result && result.awarded) {
+        setShowDailyBonusAlert({
+          streak: result.streak,
+          reward: result.reward
+        });
+        onProfileChange(result.profile);
+        // Update transaction records with check-in log
+        const liveTransactions = await api.transactions.list(currentProfile.id);
+        setTransactions(liveTransactions);
+      } else if (result && result.message) {
+        setBonusClaimError(result.message);
       }
-    };
-    if (currentProfile?.id) {
-      runCheckIn();
+    } catch (e: any) {
+      console.warn('Daily check-in verification failed:', e);
+      setBonusClaimError(e.message || 'Failed to complete daily check-in.');
+    } finally {
+      setIsClaimingBonus(false);
     }
-  }, [currentProfile?.id]);
+  };
 
   // Video Ad player countdown clock callback
   useEffect(() => {
@@ -734,15 +739,45 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 </div>
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest font-mono">Daily Login Bonus</span>
+                    <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest font-mono">Daily Login Bonus</span>
                   </div>
-                  <p className="text-2xl font-mono font-bold text-orange-500 tracking-tight">{currentProfile.login_streak || 0} <span className="text-xs text-slate-400 font-sans">Days</span></p>
+                  <p className="text-2xl font-mono font-bold text-orange-500 tracking-tight">
+                    {currentProfile.login_streak || 0} <span className="text-xs text-slate-400 font-sans">Days</span>
+                  </p>
                   <p className="text-[10px] text-slate-400 mt-1 font-sans">Streak resets if check-in is missed by 24h.</p>
+                  
+                  {bonusClaimError && (
+                    <div className="mt-2.5 p-2 rounded-xl bg-red-950/40 border border-red-500/20 text-[10px] text-red-400 leading-tight font-sans">
+                      ⚠️ {bonusClaimError}
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-1.5 text-[10px] text-orange-400 font-mono">
-                  <Flame className="h-3.5 w-3.5 shrink-0 animate-pulse text-orange-500" />
-                  <span>Consecutive Reward Boosted</span>
+                <div className="mt-3.5 pt-3 border-t border-white/5">
+                  {currentProfile.last_login_date === new Date().toISOString().split('T')[0] ? (
+                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono font-extrabold bg-emerald-500/10 py-1.5 px-2.5 rounded-xl border border-emerald-500/10 justify-center w-full">
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Claimed for Today!</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleClaimDailyBonus}
+                      disabled={isClaimingBonus}
+                      className="cursor-pointer w-full text-center text-[10px] uppercase font-sans font-bold bg-gradient-to-r from-orange-500 to-amber-500 hover:brightness-110 disabled:brightness-75 py-2.5 px-3 rounded-xl border border-orange-400/20 shadow-md shadow-orange-500/5 transition-all text-white flex items-center justify-center gap-1.5"
+                    >
+                      {isClaimingBonus ? (
+                        <>
+                          <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>Verifying Task...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Flame className="h-3.5 w-3.5 shrink-0 animate-pulse text-white" />
+                          <span>Claim 0.0001 USDT</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1016,18 +1051,18 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
 
             <p className="text-sm text-slate-300 leading-relaxed mb-6 font-medium">
               Do you want to add a task? Follow this link:{' '}
-              <span className="text-cyan-400 font-bold underline">usdt-addtask.xyz</span> to let people do your own tasks!
+              <span className="text-cyan-400 font-bold underline">usdt-addtask.vercel.app</span> to let people do your own tasks!
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
               <a 
-                href="https://usdt-addtask.xyz"
+                href="https://usdt-addtask.vercel.app"
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setIsAddTaskModalOpen(false)}
                 className="flex-1 cursor-pointer flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-500 to-electric-blue hover:brightness-110 shadow-lg shadow-cyan-500/10 py-3 px-5 text-center text-xs font-extrabold text-white uppercase tracking-wider font-sans transition-all"
               >
-                <span>Navigate to usdt-addtask.xyz</span>
+                <span>Navigate to usdt-addtask.vercel.app</span>
                 <ArrowUpRight className="h-4 w-4" />
               </a>
               <button 
