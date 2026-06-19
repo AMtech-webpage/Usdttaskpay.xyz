@@ -1358,6 +1358,19 @@ export const api = {
           }
         });
 
+        // Always inject seeders so local sandbox profiles are populated and beautifully sorted together
+        const seeders: UserProfile[] = [
+          { id: 'seeder-1', email: 'satoshi@usdt-task.xyz', full_name: 'Satoshi_Earn', balance: 145.5000, total_earned: 280.5000, total_platform_commission: 70.1250, wallet_address: 'TPrx...902a', referral_count: 42, referral_earnings: 14.2000, created_at: new Date().toISOString() },
+          { id: 'seeder-2', email: 'vitalik@eth.net', full_name: 'Vitalik_Fan', balance: 92.2000, total_earned: 198.8000, total_platform_commission: 49.5000, wallet_address: '0x3d...fa21', referral_count: 28, referral_earnings: 5.8000, created_at: new Date().toISOString() },
+          { id: 'seeder-3', email: 'cz@binance.com', full_name: 'CZ_Watch_Daily', balance: 68.8000, total_earned: 142.2000, total_platform_commission: 35.5000, wallet_address: '0x99...ee34', referral_count: 19, referral_earnings: 9.9000, created_at: new Date().toISOString() }
+        ];
+
+        seeders.forEach(s => {
+          if (!localProfiles.some(p => p.email?.toLowerCase() === s.email?.toLowerCase())) {
+            localProfiles.push(s);
+          }
+        });
+
         if (localProfiles.length > 0) {
           return localProfiles
             .sort((a, b) => {
