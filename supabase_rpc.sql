@@ -24,8 +24,38 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     last_login_date DATE,
     login_streak INTEGER DEFAULT 0 NOT NULL,
     
+    -- Location & VPN detection Columns
+    country TEXT,
+    country_code TEXT,
+    region TEXT,
+    city TEXT,
+    ip_address TEXT,
+    is_vpn_proxy BOOLEAN DEFAULT FALSE NOT NULL,
+    vpn_provider TEXT,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Safeguard: Ensure ALL columns exist on profiles table if the table was created previously without them
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_earned NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_platform_commission NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wallet_address TEXT DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_earnings NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_count INTEGER DEFAULT 0 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_login_date DATE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS login_streak INTEGER DEFAULT 0 NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country_code TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS region TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ip_address TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_vpn_proxy BOOLEAN DEFAULT FALSE NOT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS vpn_provider TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
 
 -- Enable Row Level Security (RLS) on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

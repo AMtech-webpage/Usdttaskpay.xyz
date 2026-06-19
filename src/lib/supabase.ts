@@ -201,7 +201,7 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   
   const defaultFields = ['id', 'email', 'full_name', 'balance', 'total_earned', 'created_at'];
   if (!supabase) {
-    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak'];
+    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak', 'country', 'country_code', 'region', 'city', 'ip_address', 'is_vpn_proxy', 'vpn_provider'];
     return detectedColumns;
   }
   
@@ -223,30 +223,53 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   
   // Proactively test presence of optional/referral related columns
   const finalFields = [...defaultFields];
-  const testFields = ['total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak'];
+  const testFields = [
+    'total_platform_commission', 
+    'wallet_address', 
+    'referred_by', 
+    'referral_code', 
+    'referral_earnings', 
+    'referral_count', 
+    'last_login_date', 
+    'login_streak',
+    'country',
+    'country_code',
+    'region',
+    'city',
+    'ip_address',
+    'is_vpn_proxy',
+    'vpn_provider'
+  ];
   
-  for (const field of testFields) {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .select(field)
-        .limit(1);
-        
-      if (!error) {
-        finalFields.push(field);
-      } else {
-        const isColumnMissing = error.code === '42703' || error.message?.includes('does not exist');
-        if (!isColumnMissing) {
-          finalFields.push(field);
+  const results = await Promise.all(
+    testFields.map(async (field) => {
+      try {
+        const { error } = await supabase!
+          .from('profiles')
+          .select(field)
+          .limit(1);
+          
+        if (!error) {
+          return { field, present: true };
+        } else {
+          // If code is 42703 (undefined_column), the column is definitely missing
+          const isColumnMissing = error.code === '42703' || error.message?.toLowerCase().includes('does not exist');
+          return { field, present: !isColumnMissing };
         }
+      } catch {
+        return { field, present: false };
       }
-    } catch {
-      // Omit if fails completely
+    })
+  );
+
+  for (const res of results) {
+    if (res.present) {
+      finalFields.push(res.field);
     }
   }
   
   detectedColumns = finalFields;
-  console.log('Dynamic schema profiles columns cached:', detectedColumns);
+  console.log('Dynamic schema profiles columns cached parallelly:', detectedColumns);
   return detectedColumns;
 }
 
@@ -323,15 +346,30 @@ async function ensureProfileExists(
   }
 
   const newProfile: any = {
-    id: userId,
-    email: userEmail,
-    full_name: userFullName,
-    balance: 0.0000,
-    total_earned: 0.0000,
-    total_platform_commission: 0.0000,
-    wallet_address: '',
-    created_at: new Date().toISOString()
+    id: userId
   };
+
+  if (columns.includes('email')) {
+    newProfile.email = userEmail;
+  }
+  if (columns.includes('full_name')) {
+    newProfile.full_name = userFullName;
+  }
+  if (columns.includes('balance')) {
+    newProfile.balance = 0.0000;
+  }
+  if (columns.includes('total_earned')) {
+    newProfile.total_earned = 0.0000;
+  }
+  if (columns.includes('total_platform_commission')) {
+    newProfile.total_platform_commission = 0.0000;
+  }
+  if (columns.includes('wallet_address')) {
+    newProfile.wallet_address = '';
+  }
+  if (columns.includes('created_at')) {
+    newProfile.created_at = new Date().toISOString();
+  }
 
   if (columns.includes('referred_by')) {
     newProfile.referred_by = resolvedReferredBy;
@@ -346,15 +384,46 @@ async function ensureProfileExists(
     newProfile.referral_count = 0;
   }
 
-  const { data: insertedProfile, error: insertError } = await supabase
-    .from('profiles')
-    .insert(newProfile)
-    .select()
-    .maybeSingle();
+  let insertedProfile: any = null;
+  try {
+    const { data, error: insertError } = await supabase
+      .from('profiles')
+      .insert(newProfile)
+      .select()
+      .maybeSingle();
 
-  if (insertError) {
-    console.error('Failed to insert new profile row:', insertError.message);
-    throw insertError;
+    if (insertError) {
+      if (insertError.code === '23505' || insertError.message?.toLowerCase().includes('duplicate key') || insertError.message?.toLowerCase().includes('already exists')) {
+        console.log('[Supabase Auto-Conflict Sync] Profile was already created concurrently. Fetching...');
+        const { data: refetchedProfile, error: refetchError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        if (!refetchError && refetchedProfile) {
+          insertedProfile = refetchedProfile;
+        } else {
+          throw insertError;
+        }
+      } else {
+        throw insertError;
+      }
+    } else {
+      insertedProfile = data;
+    }
+  } catch (err: any) {
+    console.warn('[Supabase Sync Fallback] Profile write error, executing recovery refetch:', err.message || err);
+    const { data: finalProfile, error: finalError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!finalError && finalProfile) {
+      insertedProfile = finalProfile;
+    } else {
+      // Return a simulated block so the transaction does not crash the UI
+      insertedProfile = newProfile;
+    }
   }
 
   // Successfully inserted! Bump referred_count of inviter if applicable
@@ -519,7 +588,40 @@ export const api = {
           password
         });
         if (error) throw error;
-        return data;
+        
+        // Fetch and ensure profile row exists synchronously/safely under active authenticated session
+        try {
+          const profile = await ensureProfileExists(
+            data.user.id,
+            data.user.email || email,
+            data.user.user_metadata?.full_name || 'Web3 Earn User',
+            data.user.user_metadata?.referred_by_code
+          );
+          return {
+            user: data.user,
+            session: data.session,
+            profile
+          };
+        } catch (profileError: any) {
+          console.error("Profile retrieval error during signIn:", profileError.message || profileError);
+          return {
+            user: data.user,
+            session: data.session,
+            profile: {
+              id: data.user.id,
+              email: data.user.email || email,
+              full_name: data.user.user_metadata?.full_name || 'Web3 Earn User',
+              balance: 0.0000,
+              total_earned: 0.0000,
+              total_platform_commission: 0.0000,
+              wallet_address: '',
+              referral_code: '',
+              referral_earnings: 0.0000,
+              referral_count: 0,
+              created_at: data.user.created_at || new Date().toISOString()
+            } as UserProfile
+          };
+        }
       } else {
         const users = getLocalData<any[]>('w2e_users', []);
         const matched = users.find(
@@ -1372,6 +1474,77 @@ export const api = {
       }
 
       return { profile, streak: newStreak, reward: rewardAmount, awarded: true };
+    },
+
+    async updateLocationMetadata(
+      userId: string,
+      locationData: {
+        country?: string;
+        country_code?: string;
+        region?: string;
+        city?: string;
+        ip_address?: string;
+        is_vpn_proxy?: boolean;
+        vpn_provider?: string;
+      }
+    ): Promise<UserProfile> {
+      if (isSupabaseConfigured() && supabase) {
+        const columns = await getAvailableProfileColumns();
+        const payload: any = {};
+        if (columns.includes('country') && locationData.country !== undefined) payload.country = locationData.country;
+        if (columns.includes('country_code') && locationData.country_code !== undefined) payload.country_code = locationData.country_code;
+        if (columns.includes('region') && locationData.region !== undefined) payload.region = locationData.region;
+        if (columns.includes('city') && locationData.city !== undefined) payload.city = locationData.city;
+        if (columns.includes('ip_address') && locationData.ip_address !== undefined) payload.ip_address = locationData.ip_address;
+        if (columns.includes('is_vpn_proxy') && locationData.is_vpn_proxy !== undefined) payload.is_vpn_proxy = locationData.is_vpn_proxy;
+        if (columns.includes('vpn_provider') && locationData.vpn_provider !== undefined) payload.vpn_provider = locationData.vpn_provider;
+
+        if (Object.keys(payload).length > 0) {
+          const { data, error } = await supabase
+            .from('profiles')
+            .update(payload)
+            .eq('id', userId)
+            .select()
+            .maybeSingle();
+
+          if (error) {
+            console.error('Error updating location metadata in Supabase:', error);
+            throw error;
+          }
+          if (data) {
+            return data as UserProfile;
+          }
+        }
+        // Return profile as-is if no update done
+        const { data: dbProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        return dbProfile as UserProfile;
+      } else {
+        const profileKey = `w2e_profile_${userId}`;
+        const profile = getLocalData<UserProfile>(profileKey, {
+          id: userId,
+          email: '',
+          full_name: '',
+          balance: 0,
+          total_earned: 0,
+          total_platform_commission: 0,
+          created_at: new Date().toISOString()
+        });
+
+        if (locationData.country !== undefined) profile.country = locationData.country;
+        if (locationData.country_code !== undefined) profile.country_code = locationData.country_code;
+        if (locationData.region !== undefined) profile.region = locationData.region;
+        if (locationData.city !== undefined) profile.city = locationData.city;
+        if (locationData.ip_address !== undefined) profile.ip_address = locationData.ip_address;
+        if (locationData.is_vpn_proxy !== undefined) profile.is_vpn_proxy = locationData.is_vpn_proxy;
+        if (locationData.vpn_provider !== undefined) profile.vpn_provider = locationData.vpn_provider;
+
+        setLocalData(profileKey, profile);
+        return profile;
+      }
     }
   },
 

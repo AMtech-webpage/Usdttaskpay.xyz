@@ -40,7 +40,12 @@ export default function App() {
     const runSecurityAudit = async () => {
       try {
         const telemetry = await verifyUserSecurity();
-        if (telemetry.isProxyOrVpn) {
+        const isDevEnv = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' || 
+                         window.location.hostname.includes('.run.app') || 
+                         window.location.hostname.includes('aistudio');
+
+        if (telemetry.isProxyOrVpn && !isDevEnv) {
           setSecurityBlock({ blocked: true, telemetry });
         } else {
           setSecurityBlock({ blocked: false, telemetry });

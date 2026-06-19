@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AdCampaign, MicroTask, Transaction, api, isSupabaseConfigured } from '../lib/supabase';
+import { detectLocationSecurity } from '../lib/geo';
 import { 
   Coins, 
   Wallet, 
@@ -30,7 +31,10 @@ import {
   LayoutDashboard,
   Settings,
   PlusCircle,
-  Trophy
+  Trophy,
+  Globe,
+  RefreshCw,
+  Shield
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
@@ -47,6 +51,7 @@ import { TasksView } from './dashboard/TasksView';
 import { WithdrawView } from './dashboard/WithdrawView';
 import { SettingsView } from './dashboard/SettingsView';
 import LeaderboardView from './dashboard/LeaderboardView';
+import LeaderboardWidget from './dashboard/LeaderboardWidget';
 
 interface EarningsDashboardProps {
   currentProfile: UserProfile;
@@ -102,6 +107,51 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   // Timeframe and daily login check-in modal states
   const [timeframe, setTimeframe] = useState<7 | 30>(7);
   const [showDailyBonusAlert, setShowDailyBonusAlert] = useState<{ streak: number; reward: number } | null>(null);
+
+  // Location detection states
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
+  const performLocationDetection = async (forceRefresh = false) => {
+    if (!currentProfile?.id) return;
+    setIsDetectingLocation(true);
+    setGeoError(null);
+    try {
+      const geo = await detectLocationSecurity();
+      // Only write to database if the stored info is different or we explicitly force a refresh
+      const needsDatabaseUpdate = forceRefresh || 
+        !currentProfile.country || 
+        currentProfile.ip_address !== geo.ip ||
+        currentProfile.is_vpn_proxy !== geo.is_vpn_proxy;
+
+      if (needsDatabaseUpdate) {
+        const updated = await api.profiles.updateLocationMetadata(currentProfile.id, {
+          country: geo.country,
+          country_code: geo.country_code,
+          region: geo.region,
+          city: geo.city,
+          ip_address: geo.ip,
+          is_vpn_proxy: geo.is_vpn_proxy,
+          vpn_provider: geo.vpn_provider
+        });
+        if (updated) {
+          onProfileChange(updated);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error during automatic geolocation check:', err);
+      setGeoError(err.message || 'Unable to load location security status');
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentProfile?.id) {
+      // Auto-run on load
+      performLocationDetection(false);
+    }
+  }, [currentProfile?.id]);
 
   const inviteLink = `${window.location.origin}${window.location.pathname}?ref=${currentProfile.referral_code || currentProfile.id}`;
 
@@ -700,6 +750,90 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Geolocation Security Anchor Card (span 6) */}
+              <div className="md:col-span-12 xl:col-span-6 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 h-40 w-40 bg-orange-500/5 blur-[80px] rounded-full pointer-events-none" />
+                
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] text-amber-400 font-mono font-bold uppercase tracking-widest flex items-center gap-1">
+                      <Shield className="h-3.5 w-3.5 text-amber-400" />
+                      Location Security System
+                    </span>
+                    <button
+                      onClick={() => performLocationDetection(true)}
+                      disabled={isDetectingLocation}
+                      className="cursor-pointer text-[10px] px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-slate-300 rounded font-mono font-bold flex items-center gap-1 transition-all"
+                    >
+                      <RefreshCw className={`h-2.5 w-2.5 ${isDetectingLocation ? 'animate-spin' : ''}`} />
+                      <span>Refresh Check</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-1">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-400 flex items-center gap-1.5 font-mono">
+                        <Globe className="h-4 w-4 text-cyan-400" />
+                        <span>IP: {currentProfile.ip_address || 'Detecting...'}</span>
+                      </div>
+                      
+                      <div className="text-xl font-bold text-white mt-1.5 tracking-tight flex items-center gap-2">
+                        <span>{currentProfile.country ? `${currentProfile.city || 'Resolving'}, ${currentProfile.region || ''}` : 'Resolving IP Address...'}</span>
+                        {currentProfile.country_code && (
+                          <span className="text-xs font-mono py-0.5 px-2 rounded bg-cyan-950 border border-cyan-500/20 text-cyan-400 uppercase font-black">
+                            {currentProfile.country_code}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {currentProfile.country && (
+                        <p className="text-[10px] text-slate-400 mt-1 font-sans">
+                          Country Verified: <span className="text-slate-200 font-semibold">{currentProfile.country}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="sm:text-right shrink-0">
+                      <span className="text-[10px] text-slate-500 uppercase font-mono block">Security Standard</span>
+                      {currentProfile.is_vpn_proxy ? (
+                        <span className="inline-flex mt-1 items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-mono text-[10px] font-bold">
+                          ⚠️ VPN/Proxy Detected
+                        </span>
+                      ) : (
+                        <span className="inline-flex mt-1 items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">
+                          ✓ Secure Direct Node
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {geoError && (
+                  <div className="mt-3 p-2 bg-red-950/30 border border-red-500/10 rounded-xl text-[10px] text-red-400">
+                    ⚠️ {geoError}
+                  </div>
+                )}
+
+                {currentProfile.is_vpn_proxy && (
+                  <div className="mt-3.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-300 leading-normal font-sans">
+                    <strong>Proxy/VPN Policy Flagged:</strong> Payout regulations require matching country rules under strict anti-sybil consensus. Ensure your connection does not mask your original ISP to avoid payout review delays.
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5 font-mono text-[11px]">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase">ISP/PROVIDER</span>
+                    <span className="font-semibold text-slate-300 truncate block max-w-[150px]">{currentProfile.vpn_provider || 'Local Network Partner'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase">STATUS RATING</span>
+                    <span className={`font-semibold ${currentProfile.is_vpn_proxy ? 'text-amber-400' : 'text-emerald-400'} block`}>
+                      {currentProfile.is_vpn_proxy ? 'Proxy Restriction' : 'A+ Compliant'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Cumulative Earned Card (span 2) */}
               <div className="md:col-span-4 xl:col-span-2 bg-[#161B28] rounded-3xl p-6 border border-white/5 flex flex-col justify-between shadow-lg">
                 <div>
@@ -863,63 +997,76 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
               </div>
             </div>
 
-            {/* AUDIT CODES / HISTORICAL LOG LIST */}
-            <div className="rounded-3xl border border-white/5 bg-[#161B28] p-6 shadow-xl">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <History className="h-5 w-5 text-slate-400" />
-                  <h3 className="font-display font-extrabold text-lg text-white">Attention Ledger History</h3>
+            {/* DUAL SECTION: GENERAL HISTORY LEDGER & REALTIME LEADERBOARD WIDGET */}
+            <div id="dashboard-bottom-row-grid" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* AUDIT CODES / HISTORICAL LOG LIST */}
+              <div id="attention-ledger-container" className="lg:col-span-7 rounded-3xl border border-white/5 bg-[#161B28] p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="mb-4 flex items-center justify-between pb-3 border-b border-white/5">
+                    <div className="flex items-center space-x-2">
+                      <History className="h-5 w-5 text-slate-400" />
+                      <h3 className="font-display font-extrabold text-[#E2E8F0] text-base">Attention Ledger History</h3>
+                    </div>
+                    <BookOpen className="h-4 w-4 text-slate-500" />
+                  </div>
+
+                  {isLoading ? (
+                    <div className="flex justify-center p-12">
+                      <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                    </div>
+                  ) : transactions.length === 0 ? (
+                    <div className="p-6 rounded-2xl bg-slate-950/40 text-center text-slate-600 text-xs font-mono border border-slate-900">
+                      No registered database entries yet. Completed videos or withdrawals output details here.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                      {transactions.map((tx) => (
+                        <div key={tx.id} className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-900 space-y-1.5 hover:border-slate-800 transition-all">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <span className="block text-[11px] font-semibold text-slate-200 line-clamp-1">{tx.description}</span>
+                              <span className="block text-[9px] font-mono text-slate-500 mt-0.5">
+                                {new Date(tx.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            
+                            <div className="text-right">
+                              <span className={`block text-[11px] font-mono font-bold ${
+                                tx.type === 'withdrawal' ? 'text-red-400' : 'text-emerald-400'
+                              }`}>
+                                {tx.type === 'withdrawal' ? '-' : '+'}{tx.amount.toFixed(4)} USDT
+                              </span>
+                              <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-widest leading-none mt-0.5">
+                                {tx.type}
+                              </span>
+                            </div>
+                          </div>
+
+                          {tx.tx_hash && (
+                            <div className="flex items-center justify-between border-t border-slate-900/60 pt-1.5 text-[9px] font-mono">
+                              <span className="text-slate-500">Tx ID: {tx.tx_hash.substring(0, 10)}...{tx.tx_hash.substring(tx.tx_hash.length - 10)}</span>
+                              <button
+                                onClick={() => copyToClipboard(tx.tx_hash!, tx.id)}
+                                className="cursor-pointer text-[9px] text-cyan-500/85 hover:text-cyan-450 hover:underline flex items-center space-x-1"
+                              >
+                                <span>{copiedTxId === tx.id ? 'Copied' : 'Copy Hash'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <BookOpen className="h-4 w-4 text-slate-500" />
               </div>
 
-              {isLoading ? (
-                <div className="flex justify-center p-6">
-                  <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-                </div>
-              ) : transactions.length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-950/40 text-center text-slate-600 text-xs font-mono">
-                  No registered database entries yet. Completed videos or withdrawals output details here.
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                  {transactions.map((tx) => (
-                    <div key={tx.id} className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-900 space-y-1.5 hover:border-slate-800 transition-all">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <span className="block text-[11px] font-semibold text-slate-200 line-clamp-1">{tx.description}</span>
-                          <span className="block text-[9px] font-mono text-slate-500 mt-0.5">
-                            {new Date(tx.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        
-                        <div className="text-right">
-                          <span className={`block text-[11px] font-mono font-bold ${
-                            tx.type === 'withdrawal' ? 'text-red-400' : 'text-emerald-400'
-                          }`}>
-                            {tx.type === 'withdrawal' ? '-' : '+'}{tx.amount.toFixed(4)} USDT
-                          </span>
-                          <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-widest leading-none mt-0.5">
-                            {tx.type}
-                          </span>
-                        </div>
-                      </div>
-
-                      {tx.tx_hash && (
-                        <div className="flex items-center justify-between border-t border-slate-900/60 pt-1.5 text-[9px] font-mono">
-                          <span className="text-slate-500">Tx ID: {tx.tx_hash.substring(0, 10)}...{tx.tx_hash.substring(tx.tx_hash.length - 10)}</span>
-                          <button
-                            onClick={() => copyToClipboard(tx.tx_hash!, tx.id)}
-                            className="cursor-pointer text-[9px] text-cyan-500/85 hover:text-cyan-450 hover:underline flex items-center space-x-1"
-                          >
-                            <span>{copiedTxId === tx.id ? 'Copied' : 'Copy Hash'}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* REAL-TIME TOP EARNERS LEADERBOARD WIDGET */}
+              <div id="top-earners-widget-container" className="lg:col-span-5 flex flex-col justify-stretch">
+                <LeaderboardWidget 
+                  currentProfile={currentProfile}
+                  onNavigateTab={(tabId) => setDashboardTab(tabId)}
+                />
+              </div>
             </div>
           </div>
         )}

@@ -13,6 +13,13 @@ export interface UserProfile {
   referral_count?: number; // Total number of successfully referred users
   last_login_date?: string; // Daily Login tracker
   login_streak?: number; // Number of consecutive login days
+  country?: string; // Country name
+  country_code?: string; // E.g., US, NG, DE
+  region?: string; // Region or State
+  city?: string; // City
+  ip_address?: string; // IPv4/IPv6 address
+  is_vpn_proxy?: boolean; // True if VPN, proxy, hosting, or Tor detected
+  vpn_provider?: string; // ISP or Provider info
 }
 
 export interface AdCampaign {
