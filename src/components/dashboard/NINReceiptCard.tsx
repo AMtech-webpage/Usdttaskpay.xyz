@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import html2canvas from 'html2canvas';
+import QRCode from 'qrcode';
 import { Download, ShieldCheck, Cpu, ArrowDownToLine, RefreshCw, Layers } from 'lucide-react';
 import { UserProfile } from '../../types';
 
@@ -130,179 +131,44 @@ const FakeBarcode: React.FC = () => {
   );
 };
 
-// Scalable, CORS-safe, local vector QR Code for https://usdt-task.xyz
+// Mathematically accurate, scannable, CORS-safe, offline QR Code generator for https://usdt-task.xyz
 const QRCodeSVG: React.FC = () => {
-  return (
-    <svg width="48" height="48" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg" className="rounded bg-white p-[1px]">
-      <rect width="29" height="29" fill="white" />
-      
-      {/* Finder Pattern Top-Left */}
-      <rect x="0" y="0" width="7" height="7" fill="#0f172a" />
-      <rect x="1" y="1" width="5" height="5" fill="white" />
-      <rect x="2" y="2" width="3" height="3" fill="#0f172a" />
-      
-      {/* Finder Pattern Top-Right */}
-      <rect x="22" y="0" width="7" height="7" fill="#0f172a" />
-      <rect x="23" y="1" width="5" height="5" fill="white" />
-      <rect x="24" y="2" width="3" height="3" fill="#0f172a" />
-      
-      {/* Finder Pattern Bottom-Left */}
-      <rect x="0" y="22" width="7" height="7" fill="#0f172a" />
-      <rect x="1" y="23" width="5" height="5" fill="white" />
-      <rect x="2" y="24" width="3" height="3" fill="#0f172a" />
-      
-      {/* Timing Patterns */}
-      <rect x="8" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="10" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="12" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="14" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="16" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="18" y="2" width="1" height="1" fill="#0f172a" />
-      <rect x="20" y="2" width="1" height="1" fill="#0f172a" />
-      
-      <rect x="2" y="8" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="10" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="12" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="14" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="16" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="18" width="1" height="1" fill="#0f172a" />
-      <rect x="2" y="20" width="1" height="1" fill="#0f172a" />
+  const [src, setSrc] = useState<string>('');
 
-      {/* Alignment Pattern (near bottom right) */}
-      <rect x="20" y="20" width="5" height="5" fill="#0f172a" />
-      <rect x="21" y="21" width="3" height="3" fill="white" />
-      <rect x="22" y="22" width="1" height="1" fill="#0f172a" />
-      
-      {/* Deterministic QR bits for "https://usdt-task.xyz" */}
-      <g fill="#0f172a">
-        <rect x="8" y="7" width="1" height="1" />
-        <rect x="9" y="7" width="2" height="1" />
-        <rect x="13" y="7" width="1" height="1" />
-        <rect x="15" y="7" width="2" height="1" />
-        <rect x="18" y="7" width="1" height="1" />
-        <rect x="21" y="7" width="1" height="1" />
-        
-        <rect x="7" y="8" width="1" height="1" />
-        <rect x="10" y="8" width="2" height="1" />
-        <rect x="14" y="8" width="1" height="2" />
-        <rect x="17" y="8" width="1" height="1" />
-        <rect x="19" y="8" width="3" height="1" />
-        
-        <rect x="4" y="10" width="1" height="1" />
-        <rect x="6" y="10" width="2" height="1" />
-        <rect x="9" y="10" width="1" height="2" />
-        <rect x="12" y="10" width="2" height="1" />
-        <rect x="16" y="10" width="2" height="1" />
-        <rect x="20" y="10" width="1" height="1" />
-        <rect x="25" y="10" width="1" height="2" />
-        
-        <rect x="1" y="11" width="2" height="1" />
-        <rect x="5" y="11" width="1" height="1" />
-        <rect x="8" y="11" width="1" height="2" />
-        <rect x="11" y="11" width="1" height="1" />
-        <rect x="14" y="11" width="2" height="1" />
-        <rect x="19" y="11" width="1" height="1" />
-        <rect x="22" y="11" width="3" height="1" />
-        
-        <rect x="3" y="12" width="2" height="1" />
-        <rect x="7" y="12" width="1" height="1" />
-        <rect x="10" y="12" width="3" height="1" />
-        <rect x="15" y="12" width="1" height="2" />
-        <rect x="17" y="12" width="2" height="1" />
-        <rect x="21" y="12" width="1" height="1" />
-        <rect x="24" y="12" width="1" height="1" />
-        
-        <rect x="0" y="13" width="2" height="1" />
-        <rect x="5" y="13" width="1" height="1" />
-        <rect x="9" y="13" width="1" height="2" />
-        <rect x="12" y="13" width="2" height="1" />
-        <rect x="18" y="13" width="1" height="1" />
-        <rect x="20" y="13" width="3" height="1" />
-        <rect x="26" y="13" width="2" height="1" />
-        
-        <rect x="2" y="14" width="2" height="1" />
-        <rect x="7" y="14" width="1" height="1" />
-        <rect x="11" y="14" width="1" height="1" />
-        <rect x="14" y="14" width="3" height="1" />
-        <rect x="19" y="14" width="1" height="2" />
-        <rect x="23" y="14" width="2" height="1" />
-        
-        <rect x="4" y="15" width="2" height="1" />
-        <rect x="8" y="15" width="1" height="1" />
-        <rect x="10" y="15" width="2" height="2" />
-        <rect x="13" y="15" width="1" height="1" />
-        <rect x="16" y="15" width="2" height="1" />
-        <rect x="21" y="15" width="2" height="1" />
-        <rect x="25" y="15" width="3" height="1" />
-        
-        <rect x="2" y="16" width="2" height="1" />
-        <rect x="6" y="16" width="1" height="1" />
-        <rect x="9" y="16" width="1" height="2" />
-        <rect x="14" y="16" width="2" height="1" />
-        <rect x="18" y="16" width="1" height="1" />
-        <rect x="23" y="16" width="1" height="2" />
-        <rect x="27" y="16" width="2" height="1" />
-        
-        <rect x="5" y="17" width="1" height="1" />
-        <rect x="7" y="17" width="2" height="1" />
-        <rect x="12" y="17" width="3" height="1" />
-        <rect x="16" y="17" width="2" height="2" />
-        <rect x="20" y="17" width="1" height="1" />
-        <rect x="25" y="17" width="2" height="1" />
-        
-        <rect x="1" y="18" width="2" height="1" />
-        <rect x="4" y="18" width="1" height="1" />
-        <rect x="10" y="18" width="1" height="2" />
-        <rect x="14" y="18" width="1" height="1" />
-        <rect x="19" y="18" width="1" height="1" />
-        <rect x="22" y="18" width="3" height="1" />
-        <rect x="28" y="18" width="1" height="1" />
-        
-        <rect x="3" y="19" width="1" height="2" />
-        <rect x="6" y="19" width="2" height="1" />
-        <rect x="11" y="19" width="3" height="1" />
-        <rect x="15" y="19" width="1" height="1" />
-        <rect x="17" y="19" width="2" height="2" />
-        <rect x="21" y="19" width="1" height="1" />
-        <rect x="24" y="19" width="2" height="1" />
-        
-        <rect x="0" y="20" width="2" height="1" />
-        <rect x="5" y="20" width="1" height="1" />
-        <rect x="9" y="20" width="1" height="1" />
-        <rect x="13" y="20" width="2" height="1" />
-        <rect x="20" y="20" width="2" height="1" />
-        <rect x="23" y="20" width="1" height="1" />
-        <rect x="26" y="20" width="3" height="1" />
-        
-        <rect x="2" y="21" width="2" height="1" />
-        <rect x="7" y="21" width="1" height="2" />
-        <rect x="10" y="21" width="2" height="1" />
-        <rect x="14" y="21" width="3" height="1" />
-        <rect x="18" y="21" width="1" height="1" />
-        <rect x="21" y="21" width="2" height="2" />
-        <rect x="25" y="21" width="1" height="1" />
-        
-        <rect x="8" y="22" width="2" height="1" />
-        <rect x="12" y="22" width="1" height="1" />
-        <rect x="15" y="22" width="2" height="2" />
-        <rect x="19" y="22" width="1" height="1" />
-        <rect x="24" y="22" width="3" height="1" />
-        
-        <rect x="9" y="23" width="1" height="1" />
-        <rect x="11" y="23" width="2" height="1" />
-        <rect x="14" y="23" width="1" height="1" />
-        <rect x="18" y="23" width="1" height="2" />
-        <rect x="20" y="23" width="3" height="1" />
-        <rect x="26" y="23" width="1" height="2" />
-        
-        <rect x="7" y="24" width="2" height="1" />
-        <rect x="10" y="24" width="1" height="1" />
-        <rect x="13" y="24" width="3" height="1" />
-        <rect x="17" y="24" width="1" height="1" />
-        <rect x="23" y="24" width="2" height="1" />
-        <rect x="28" y="24" width="1" height="1" />
-      </g>
-    </svg>
+  useEffect(() => {
+    QRCode.toDataURL('https://usdt-task.xyz', {
+      margin: 1,
+      width: 128,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff'
+      }
+    })
+      .then((url) => {
+        setSrc(url);
+      })
+      .catch((err) => {
+        console.error('Failed to generate accurate QR code:', err);
+      });
+  }, []);
+
+  if (!src) {
+    return (
+      <div 
+        className="w-11 h-11 rounded bg-slate-100 animate-pulse" 
+        style={{ width: '44px', height: '44px' }}
+      />
+    );
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt="Verification QR code" 
+      className="w-11 h-11 shrink-0 rounded bg-white"
+      crossOrigin="anonymous"
+      referrerPolicy="no-referrer"
+    />
   );
 };
 
