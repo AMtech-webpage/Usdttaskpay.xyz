@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { Download, ShieldCheck, Cpu, ArrowDownToLine, RefreshCw, Layers } from 'lucide-react';
 import { UserProfile } from '../../types';
 
-interface NINReceiptCardProps {
+interface PINReceiptCardProps {
   profile: UserProfile;
   amount: number;
   network: string;
@@ -290,7 +290,7 @@ const cleanOklchAndOklab = (cssText: string): string => {
   return result;
 };
 
-export const NINReceiptCard: React.FC<NINReceiptCardProps> = ({
+export const PINReceiptCard: React.FC<PINReceiptCardProps> = ({
   profile,
   amount,
   network,
@@ -464,7 +464,7 @@ export const NINReceiptCard: React.FC<NINReceiptCardProps> = ({
 
       const fileSafeName = profile.full_name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const link = document.createElement('a');
-      link.download = `W2E_NIN_Receipt_${fileSafeName}_${amount.toFixed(0)}_USDT.png`;
+      link.download = `W2E_PIN_Receipt_${fileSafeName}_${amount.toFixed(0)}_USDT.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (err) {
@@ -520,7 +520,7 @@ Status: PENDING REVIEW`;
             <span>Withdrawal Signature Authenticated</span>
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Your premium NIN-style digital payout proof has been minted. Download it to claim your verified USDT ledger share!
+            Your premium PIN-style digital payout proof has been minted. Download it to claim your verified USDT ledger share!
           </p>
         </div>
 
@@ -528,7 +528,7 @@ Status: PENDING REVIEW`;
         <div className="overflow-x-auto py-2">
           <div 
             ref={captureRef}
-            id="nin-card-capture"
+            id="pin-card-capture"
             className="w-[500px] h-[315px] mx-auto shrink-0 relative rounded-2xl border-2 p-3 flex flex-col justify-between font-sans select-none overflow-hidden"
             style={{
               background: cardStyle.background,
@@ -548,7 +548,7 @@ Status: PENDING REVIEW`;
               </div>
             </div>
 
-            {/* 1. Header (NIN Style National Layout) */}
+            {/* 1. Header (PIN Style National Layout) */}
             <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: 'rgba(15, 23, 42, 0.1)' }}>
               <div className="flex items-center space-x-2">
                 <span 
@@ -616,13 +616,13 @@ Status: PENDING REVIEW`;
                 </div>
               </div>
 
-              {/* Right Column: NIN Personal Details Grid */}
+              {/* Right Column: PIN Personal Details Grid */}
               <div className="col-span-8 space-y-1.5 select-text">
                 
                 {/* National Identification Code Title */}
                 <div>
                   <span className="text-[7px] font-bold block uppercase tracking-wider" style={softLabelStyle}>
-                    National User Payout ID (NIN)
+                    National User Payout ID (PIN)
                   </span>
                   <span className="font-mono text-sm leading-none font-bold tracking-wider" style={{ color: '#090d16' }}>
                     {formattedId}

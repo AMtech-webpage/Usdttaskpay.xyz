@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api, UserProfile, isSupabaseConfigured } from './lib/supabase';
+import { api, UserProfile, isSupabaseConfigured, supabase } from './lib/supabase';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { AuthModal } from './components/AuthModal';
@@ -42,19 +42,32 @@ export default function App() {
     // Capture and route secure password recovery links instantly
     const hash = window.location.hash || '';
     const search = window.location.search || '';
-    if (search.includes('recovery=true') || hash.includes('type=recovery') || hash.includes('access_token=')) {
+    const isPasswordRecovery = search.includes('recovery=true') || hash.includes('type=recovery') || hash.includes('access_token=');
+
+    if (isPasswordRecovery) {
+      console.log('[Watch2Earn SecOps] Secure password recovery link detected via URL tokens.');
       const allParams = new URLSearchParams(search || hash.replace('#', '?'));
       const activeRecoveryEmail = allParams.get('email') || '';
       if (activeRecoveryEmail) {
         localStorage.setItem('w2e_recovery_email', activeRecoveryEmail);
+      } else if (supabase) {
+        // Try to fetch session to resolve recovery email asynchronously, so we don't block
+        supabase.auth.getSession().then(({ data }) => {
+          if (data?.session?.user?.email) {
+            localStorage.setItem('w2e_recovery_email', data.session.user.email);
+            window.dispatchEvent(new CustomEvent('w2e_recovery_email_synced', { detail: data.session.user.email }));
+          }
+        });
       }
       setAuthInitialTab('new-password');
       setCurrentPage('auth');
       
-      // Gracefully clean trailing parameters from address bar
-      try {
-        window.history.replaceState(null, '', window.location.pathname);
-      } catch (_) {}
+      // Delay cleaning trailing hook parameters to let Supabase Client handle the hash fragment correctly
+      setTimeout(() => {
+        try {
+          window.history.replaceState(null, '', window.location.pathname);
+        } catch (_) {}
+      }, 1500);
     }
 
     const runSecurityAudit = async () => {
@@ -78,7 +91,11 @@ export default function App() {
         const session = await api.auth.getSession();
         if (session && session.profile) {
           setCurrentProfile(session.profile);
-          setCurrentPage('dashboard');
+          if (!isPasswordRecovery) {
+            setCurrentPage('dashboard');
+          } else {
+            console.log('[Watch2Earn Auth] Active recovered auth session validated - staying in recovery form.');
+          }
         }
       } catch (err) {
         console.error('Session loading failed: ', err);

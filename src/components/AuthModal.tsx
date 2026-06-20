@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api, isSupabaseConfigured } from '../lib/supabase';
+import { api, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Mail, Lock, User, Eye, EyeOff, Loader2, AlertTriangle, ShieldCheck, Database, Info, Cpu } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -33,12 +33,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Load recovery email if in secure reset state
   React.useEffect(() => {
-    if (activeTab === 'new-password' || (initialState as any) === 'new-password') {
-      const cachedRecovery = localStorage.getItem('w2e_recovery_email');
-      if (cachedRecovery) {
-        setResetEmail(cachedRecovery);
+    const loadEmail = async () => {
+      if (activeTab === 'new-password' || (initialState as any) === 'new-password') {
+        const cachedRecovery = localStorage.getItem('w2e_recovery_email');
+        if (cachedRecovery) {
+          setResetEmail(cachedRecovery);
+        }
+        
+        // Also try to read it dynamically from the active Supabase session if configured!
+        if (isProd && supabase) {
+          try {
+            const { data } = await supabase.auth.getSession();
+            if (data?.session?.user?.email) {
+              setResetEmail(data.session.user.email);
+              localStorage.setItem('w2e_recovery_email', data.session.user.email);
+            }
+          } catch (e) {
+            console.warn('Failed to load email from live session:', e);
+          }
+        }
       }
-    }
+    };
+    
+    loadEmail();
+    
+    // Also add event listener for dynamic sync from App.tsx
+    const handleSync = (e: Event) => {
+      const emailDetail = (e as CustomEvent).detail;
+      if (emailDetail) {
+        setResetEmail(emailDetail);
+      }
+    };
+    window.addEventListener('w2e_recovery_email_synced', handleSync);
+    return () => {
+      window.removeEventListener('w2e_recovery_email_synced', handleSync);
+    };
   }, [activeTab, initialState]);
 
   const handleForgotPassword = async (e: React.FormEvent) => {

@@ -37,7 +37,7 @@ import {
   Shield
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { NINReceiptCard } from './dashboard/NINReceiptCard';
+import { PINReceiptCard } from './dashboard/PINReceiptCard';
 import {
   ResponsiveContainer,
   LineChart,
@@ -634,7 +634,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
         <div className="border-t border-slate-900 pt-4 font-mono text-[9px] text-slate-500 space-y-0.5">
           <p className="truncate">User: {currentProfile.full_name}</p>
           {currentProfile.user_pid && (
-            <p className="text-amber-500 font-bold">NIN: {currentProfile.user_pid}</p>
+            <p className="text-amber-500 font-bold">PIN: {currentProfile.user_pid}</p>
           )}
           <p className="text-cyan-500/80">Role: Pro Streamer</p>
         </div>
@@ -705,7 +705,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             <div className="border-t border-slate-900 pt-4 font-mono text-[9px] text-slate-400 space-y-0.5">
               <p className="truncate">Session: {currentProfile.email}</p>
               {currentProfile.user_pid && (
-                <p className="text-amber-500 font-bold">NIN: {currentProfile.user_pid}</p>
+                <p className="text-amber-500 font-bold">PIN: {currentProfile.user_pid}</p>
               )}
               <p className="text-cyan-600">Secure AES Split Ledger</p>
             </div>
@@ -1549,7 +1549,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
       )}
 
       {activeReceipt && (
-        <NINReceiptCard
+        <PINReceiptCard
           profile={currentProfile}
           amount={activeReceipt.amount}
           network={activeReceipt.network}

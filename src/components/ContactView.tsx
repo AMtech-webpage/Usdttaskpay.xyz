@@ -150,7 +150,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ currentProfile, onBack
           <div>
             <h4 className="text-sm font-bold text-amber-200">Pending Withdrawal &gt; 24 Hours Policy</h4>
             <p className="mt-1 text-xs text-amber-300/80 leading-relaxed">
-              If you submitted a payout request and it is pending for <strong>more than 24 hours</strong>, security guidelines demand that you post your <strong>PIN (Payment Identity Card / NIN receipt card)</strong> to WhatsApp Live Support or send it via email. This allows protocol administrators to complete the identity verification loop and release your pending USDT.
+              If you submitted a payout request and it is pending for <strong>more than 24 hours</strong>, security guidelines demand that you post your <strong>PIN (Payment Identity Card / PIN receipt card)</strong> to WhatsApp Live Support or send it via email. This allows protocol administrators to complete the identity verification loop and release your pending USDT.
             </p>
           </div>
         </div>

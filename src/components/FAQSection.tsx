@@ -36,7 +36,7 @@ export default function FAQSection() {
       category: 'withdraw',
       icon: <Wallet className="h-4 w-4 text-cyan-400" />,
       question: "What should I do if my withdrawal request takes more than 24 hours?",
-      answer: "Normally, all standard protocol withdrawals are completed within 24 hours. Under security protocols, if your payout is pending for more than 24 hours, you must share your digital PIN (Payment Identity Card / NIN receipt card) to WhatsApp live support or our security email channel to verify human origin and fast-track the node dispatch."
+      answer: "Normally, all standard protocol withdrawals are completed within 24 hours. Under security protocols, if your payout is pending for more than 24 hours, you must share your digital PIN (Payment Identity Card / PIN receipt card) to WhatsApp live support or our security email channel to verify human origin and fast-track the node dispatch."
     },
     {
       category: 'security',

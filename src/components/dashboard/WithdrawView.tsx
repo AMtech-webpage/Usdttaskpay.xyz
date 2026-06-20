@@ -131,7 +131,7 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
         <div className="mb-6 p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/25 text-[11px] text-amber-300 leading-relaxed font-mono flex items-start space-x-2">
           <span className="text-base leading-none shrink-0">🪪</span>
           <div>
-            <strong>24h Security Hold Rule:</strong> If your payout status stays pending for longer than <strong>24 hours</strong>, please post your <strong>PIN (Payment Identity Card / NIN card)</strong> to WhatsApp support to verify validity and bypass hold queues.
+            <strong>24h Security Hold Rule:</strong> If your payout status stays pending for longer than <strong>24 hours</strong>, please post your <strong>PIN (Payment Identity Card / PIN card)</strong> to WhatsApp support to verify validity and bypass hold queues.
           </div>
         </div>
 
