@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     total_earned NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL,
     total_platform_commission NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL,
     wallet_address TEXT DEFAULT '',
+    user_pid TEXT UNIQUE,
     
     -- Referral System Columns
     referred_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -42,6 +43,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance NUMERIC(18, 6) DEFA
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_earned NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_platform_commission NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wallet_address TEXT DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS user_pid TEXT UNIQUE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_earnings NUMERIC(18, 6) DEFAULT 0.000000 NOT NULL;
@@ -239,6 +241,7 @@ BEGIN
         id,
         email,
         full_name,
+        user_pid,
         balance,
         total_earned,
         total_platform_commission,
@@ -252,6 +255,7 @@ BEGIN
         new.id,
         new.email,
         COALESCE(new.raw_user_meta_data->>'full_name', 'Crypto Streamer'),
+        (floor(random() * 90000000000) + 10000000000)::text,
         0.000000,
         0.000000,
         0.000000,

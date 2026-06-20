@@ -201,7 +201,7 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   
   const defaultFields = ['id', 'email', 'full_name', 'balance', 'total_earned', 'created_at'];
   if (!supabase) {
-    detectedColumns = [...defaultFields, 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak', 'country', 'country_code', 'region', 'city', 'ip_address', 'is_vpn_proxy', 'vpn_provider'];
+    detectedColumns = [...defaultFields, 'user_pid', 'total_platform_commission', 'wallet_address', 'referred_by', 'referral_code', 'referral_earnings', 'referral_count', 'last_login_date', 'login_streak', 'country', 'country_code', 'region', 'city', 'ip_address', 'is_vpn_proxy', 'vpn_provider'];
     return detectedColumns;
   }
   
@@ -224,6 +224,7 @@ async function getAvailableProfileColumns(): Promise<string[]> {
   // Proactively test presence of optional/referral related columns
   const finalFields = [...defaultFields];
   const testFields = [
+    'user_pid',
     'total_platform_commission', 
     'wallet_address', 
     'referred_by', 
@@ -317,6 +318,11 @@ async function ensureProfileExists(
       const updates: any = {};
       let needsUpdate = false;
 
+      if (columns.includes('user_pid') && !dbProfile.user_pid) {
+        updates.user_pid = Math.floor(10000000000 + Math.random() * 90000000000).toString();
+        needsUpdate = true;
+      }
+
       if (columns.includes('referral_code') && !dbProfile.referral_code) {
         const simpleNameSlug = (dbProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
         updates.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
@@ -393,6 +399,10 @@ async function ensureProfileExists(
     const newProfile: any = {
       id: userId
     };
+
+    if (columns.includes('user_pid')) {
+      newProfile.user_pid = Math.floor(10000000000 + Math.random() * 90000000000).toString();
+    }
 
     if (columns.includes('email')) {
       newProfile.email = userEmail;
@@ -501,6 +511,7 @@ async function ensureProfileExists(
       id: userId,
       email: userEmail,
       full_name: userFullName,
+      user_pid: Math.floor(10000000000 + Math.random() * 90000000000).toString(),
       balance: 0.0000,
       total_earned: 0.0000,
       total_platform_commission: 0.0000,
@@ -570,6 +581,7 @@ export const api = {
                 id: data.user.id,
                 email: data.user.email || email,
                 full_name: fullName,
+                user_pid: Math.floor(10000000000 + Math.random() * 90000000000).toString(),
                 balance: 0.0000,
                 total_earned: 0.0000,
                 total_platform_commission: 0.0000,
@@ -620,6 +632,7 @@ export const api = {
           id: mockUserId,
           email,
           full_name: fullName,
+          user_pid: Math.floor(10000000000 + Math.random() * 90000000000).toString(),
           balance: 0.0000,
           total_earned: 0.0000,
           total_platform_commission: 0.0000,

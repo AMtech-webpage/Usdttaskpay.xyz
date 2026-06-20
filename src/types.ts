@@ -2,6 +2,7 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  user_pid?: string; // 11-digit random payment identity card number
   balance: number; // USDT users keep (80% of ad revenue)
   total_earned: number; // Cumulative USDT users kept
   total_platform_commission: number; // Platform cumulative earnings (20%)
