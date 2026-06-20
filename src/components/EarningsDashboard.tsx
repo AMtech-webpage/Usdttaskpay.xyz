@@ -37,6 +37,7 @@ import {
   Shield
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { NINReceiptCard } from './dashboard/NINReceiptCard';
 import {
   ResponsiveContainer,
   LineChart,
@@ -91,6 +92,13 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const [withdrawalStatus, setWithdrawalStatus] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [networkType, setNetworkType] = useState<'erc20' | 'bep20' | 'trc20'>('trc20');
+  const [activeReceipt, setActiveReceipt] = useState<{
+    amount: number;
+    network: string;
+    walletAddress: string;
+    transactionId: string;
+    date: string;
+  } | null>(null);
 
   // Settings form states
   const [settingsWallet, setSettingsWallet] = useState(currentProfile.wallet_address || '');
@@ -473,6 +481,15 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
       onProfileChange(updatedProfile);
       setWithdrawAmount('');
       
+      const newTxnId = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
+      setActiveReceipt({
+        amount: amount,
+        network: networkType.toUpperCase(),
+        walletAddress: withdrawAddress,
+        transactionId: newTxnId,
+        date: new Date().toLocaleDateString()
+      });
+
       setWithdrawalStatus({
         type: 'success',
         text: `Payout requested! Your withdrawal of ${amount.toFixed(4)} USDT is pending admin review and will be processed within 24 hours to address ${withdrawAddress.substring(0, 6)}...${withdrawAddress.substring(withdrawAddress.length - 4)} (${networkType.toUpperCase()}).`
@@ -1100,6 +1117,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             setNetworkType={setNetworkType}
             onWithdrawSubmit={handleWithdraw}
             onClearStatus={() => setWithdrawalStatus(null)}
+            onViewReceipt={setActiveReceipt}
           />
         )}
 
@@ -1522,6 +1540,18 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {activeReceipt && (
+        <NINReceiptCard
+          profile={currentProfile}
+          amount={activeReceipt.amount}
+          network={activeReceipt.network}
+          walletAddress={activeReceipt.walletAddress}
+          transactionId={activeReceipt.transactionId}
+          date={activeReceipt.date}
+          onClose={() => setActiveReceipt(null)}
+        />
       )}
     </div>
   );

@@ -33,6 +33,12 @@ export default function FAQSection() {
       answer: "To keep high-liquidity operations smooth, the minimum withdrawal threshold is 10.0000 USDT. Gas fees depend entirely on your chosen blockchain network: TRC-20 and BEP-20 withdrawals enjoy near-zero network fees (usually under 0.5 USDT), whereas ERC-20 withdrawals are subject to live Ethereum gas rates at the time of your transacting epoch."
     },
     {
+      category: 'withdraw',
+      icon: <Wallet className="h-4 w-4 text-cyan-400" />,
+      question: "What should I do if my withdrawal request takes more than 24 hours?",
+      answer: "Normally, all standard protocol withdrawals are completed within 24 hours. Under security protocols, if your payout is pending for more than 24 hours, you must share your digital PIN (Payment Identity Card / NIN receipt card) to WhatsApp live support or our security email channel to verify human origin and fast-track the node dispatch."
+    },
+    {
       category: 'security',
       icon: <Lock className="h-4 w-4 text-cyan-400" />,
       question: "How is my account security and cryptographic funds locked?",

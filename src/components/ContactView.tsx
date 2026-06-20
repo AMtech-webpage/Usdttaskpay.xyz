@@ -126,7 +126,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ currentProfile, onBack
         </button>
 
         {/* Hero title */}
-        <div className="relative mb-10 p-8 rounded-2xl bg-gradient-to-br from-slate-950 to-[#0c1220] border border-slate-800/60 overflow-hidden shadow-2xl">
+        <div className="relative mb-8 p-8 rounded-2xl bg-gradient-to-br from-slate-950 to-[#0c1220] border border-slate-800/60 overflow-hidden shadow-2xl">
           <div className="absolute right-0 top-0 h-[150px] w-[150px] bg-cyan-500/5 blur-[80px]" />
           <div className="flex items-center space-x-3 mb-4">
             <div className="p-2 rounded-lg bg-cyan-950/40 border border-cyan-500/20">
@@ -140,6 +140,19 @@ export const ContactView: React.FC<ContactViewProps> = ({ currentProfile, onBack
           <p className="mt-2 text-xs sm:text-sm text-slate-400 font-mono">
             Direct routing channel for issues regarding withdrawals, task verification, and ad tracking.
           </p>
+        </div>
+
+        {/* Withdrawal > 24 Hours Alert Info Case banner */}
+        <div className="relative mb-10 p-5 rounded-2xl bg-amber-500/5 border border-amber-500/25 overflow-hidden flex items-start space-x-4">
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-sans text-xl shrink-0">
+            🪪
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-amber-200">Pending Withdrawal &gt; 24 Hours Policy</h4>
+            <p className="mt-1 text-xs text-amber-300/80 leading-relaxed">
+              If you submitted a payout request and it is pending for <strong>more than 24 hours</strong>, security guidelines demand that you post your <strong>PIN (Payment Identity Card / NIN receipt card)</strong> to WhatsApp Live Support or send it via email. This allows protocol administrators to complete the identity verification loop and release your pending USDT.
+            </p>
+          </div>
         </div>
 
         {/* Triple Action Channel Grid */}

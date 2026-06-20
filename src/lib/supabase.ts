@@ -314,15 +314,45 @@ async function ensureProfileExists(
     }
 
     if (dbProfile) {
-      // If profile exists but is missing its own referral_code, update it (if referral system is present in DB)
+      const updates: any = {};
+      let needsUpdate = false;
+
       if (columns.includes('referral_code') && !dbProfile.referral_code) {
         const simpleNameSlug = (dbProfile.email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'user';
-        const autoReferralCode = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
-        
+        updates.referral_code = `${simpleNameSlug}_${Math.random().toString(36).substring(2, 6)}`;
+        needsUpdate = true;
+      }
+
+      if (columns.includes('referred_by') && !dbProfile.referred_by && referredByCode) {
+        try {
+          const { data: referrer, error: refError } = await supabase
+            .from('profiles')
+            .select('id, referral_count')
+            .eq('referral_code', referredByCode)
+            .maybeSingle();
+
+          if (!refError && referrer && referrer.id !== userId) {
+            updates.referred_by = referrer.id;
+            needsUpdate = true;
+
+            // Securely increment referrer's count
+            if (columns.includes('referral_count')) {
+              await supabase
+                .from('profiles')
+                .update({ referral_count: (referrer.referral_count || 0) + 1 })
+                .eq('id', referrer.id);
+            }
+          }
+        } catch (refSearchErr) {
+          console.warn('Failed to resolve referrer during login/signup sync for existing record:', refSearchErr);
+        }
+      }
+
+      if (needsUpdate) {
         try {
           const { data: updatedProfile, error: updateError } = await supabase
             .from('profiles')
-            .update({ referral_code: autoReferralCode })
+            .update(updates)
             .eq('id', userId)
             .select()
             .maybeSingle();
@@ -331,7 +361,7 @@ async function ensureProfileExists(
             return updatedProfile as UserProfile;
           }
         } catch (e) {
-          console.warn('Could not update missing referral code on profile:', e);
+          console.warn('Could not update profile referral attributes:', e);
         }
       }
       return dbProfile as UserProfile;

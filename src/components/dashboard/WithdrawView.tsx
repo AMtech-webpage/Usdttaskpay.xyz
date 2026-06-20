@@ -14,6 +14,7 @@ interface WithdrawViewProps {
   setNetworkType: (type: 'erc20' | 'bep20' | 'trc20') => void;
   onWithdrawSubmit: (e: React.FormEvent) => void;
   onClearStatus?: () => void;
+  onViewReceipt?: (payload: { amount: number; network: string; walletAddress: string; transactionId: string; date: string }) => void;
 }
 
 export const WithdrawView: React.FC<WithdrawViewProps> = ({
@@ -28,6 +29,7 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
   setNetworkType,
   onWithdrawSubmit,
   onClearStatus,
+  onViewReceipt,
 }) => {
   const [history, setHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -121,9 +123,17 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
           </span>
         </div>
 
-        <p className="text-xs text-slate-400 leading-normal mb-6">
+        <p className="text-xs text-slate-400 leading-normal mb-4">
           Deploy accumulated USDT tokens directly to your external wallet address. Supported network channels operate securely.
         </p>
+
+        {/* 24-Hour Pending Policy Banner */}
+        <div className="mb-6 p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/25 text-[11px] text-amber-300 leading-relaxed font-mono flex items-start space-x-2">
+          <span className="text-base leading-none shrink-0">🪪</span>
+          <div>
+            <strong>24h Security Hold Rule:</strong> If your payout status stays pending for longer than <strong>24 hours</strong>, please post your <strong>PIN (Payment Identity Card / NIN card)</strong> to WhatsApp support to verify validity and bypass hold queues.
+          </div>
+        </div>
 
         {/* Status Notice */}
         {withdrawalStatus && (
@@ -320,8 +330,9 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
                   <th className="pb-2 font-bold uppercase tracking-wider">Date</th>
                   <th className="pb-2 font-bold uppercase tracking-wider">Amount</th>
                   <th className="pb-2 font-bold uppercase tracking-wider">Network</th>
-                  <th className="pb-2 font-bold uppercase tracking-wider">Address</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider border-none">Address</th>
                   <th className="pb-2 font-bold uppercase tracking-wider text-right">Status</th>
+                  <th className="pb-2 font-bold uppercase tracking-wider text-right">Credential</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900/40">
@@ -338,11 +349,26 @@ export const WithdrawView: React.FC<WithdrawViewProps> = ({
                         {req.network}
                       </span>
                     </td>
-                    <td className="py-3 text-slate-400 font-mono text-[10px] select-all max-w-[100px] truncate" title={req.wallet_address}>
+                    <td className="py-3 text-slate-400 font-mono text-[10px] select-all max-w-[90px] truncate" title={req.wallet_address}>
                       {req.wallet_address ? `${req.wallet_address.substring(0, 5)}...${req.wallet_address.substring(req.wallet_address.length - 4)}` : 'N/A'}
                     </td>
                     <td className="py-3 text-right">
                       {getStatusBadge(req.status)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onViewReceipt?.({
+                          amount: parseFloat(req.amount),
+                          network: req.network,
+                          walletAddress: req.wallet_address,
+                          transactionId: req.id || 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+                          date: new Date(req.created_at).toLocaleDateString()
+                        })}
+                        className="cursor-pointer inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold font-mono transition-transform active:scale-95"
+                      >
+                        <span>Card 🪪</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
